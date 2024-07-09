@@ -8,9 +8,11 @@ import { ClsModule } from 'nestjs-cls';
 import { DataSource } from 'typeorm';
 import { addTransactionalDataSource } from 'typeorm-transactional';
 
-import { AuthModule } from './modules/auth/auth.module';
+import { AuthModule } from './modules/auth-siwe/auth.module';
 import { HealthCheckerModule } from './modules/health-checker/health-checker.module';
 import { PostModule } from './modules/post/post.module';
+import { StakingModule } from './modules/staking/staking.module';
+import { TokenModule } from './modules/token/token.module';
 import { UserModule } from './modules/user/user.module';
 import { ApiConfigService } from './shared/services/api-config.service';
 import { SharedModule } from './shared/shared.module';
@@ -53,6 +55,8 @@ import { SharedModule } from './shared/shared.module';
       },
     }),
     HealthCheckerModule,
+    StakingModule,
+    TokenModule,
   ],
   providers: [],
 })
