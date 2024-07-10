@@ -6,6 +6,7 @@ import { TokenType, type RoleType } from '../../constants';
 import { ApiConfigService } from '../../shared/services/api-config.service';
 import { UserEntity } from '../user-v2/user.entity';
 import { UserService } from '../user-v2/user.service';
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -23,6 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     role: RoleType;
     type: TokenType;
   }): Promise<UserEntity> {
+    // check access token type
     if (args.type !== TokenType.ACCESS_TOKEN) {
       throw new UnauthorizedException();
     }
@@ -33,6 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: args.role,
     });
 
+    // check valid user & token revocation
     if (!user) {
       throw new UnauthorizedException();
     }

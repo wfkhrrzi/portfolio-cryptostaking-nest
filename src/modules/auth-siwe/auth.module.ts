@@ -19,7 +19,7 @@ import { PublicStrategy } from './public.strategy';
         publicKey: configService.authConfig.publicKey,
         signOptions: {
           algorithm: 'RS256',
-          expiresIn: 7200,
+          expiresIn: configService.authConfig.jwtExpirationTime,
         },
         verifyOptions: {
           algorithms: ['RS256'],

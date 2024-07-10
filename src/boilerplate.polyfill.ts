@@ -3,6 +3,7 @@ import 'source-map-support/register';
 import { compact, map } from 'lodash';
 import { Brackets, type ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 
+import { Cache, Milliseconds } from 'cache-manager';
 import { type AbstractEntity } from './common/abstract.entity';
 import { type AbstractDto } from './common/dto/abstract.dto';
 import { PageDto } from './common/dto/page.dto';
@@ -159,3 +160,13 @@ SelectQueryBuilder.prototype.paginate = async function (
 
   return [entities, pageMetaDto];
 };
+
+declare module 'cache-manager' {
+  export type CacheRedis = Omit<Cache, 'set'> & {
+    set: (
+      key: string,
+      value: unknown,
+      options?: { ttl: Milliseconds },
+    ) => Promise<void>;
+  };
+}

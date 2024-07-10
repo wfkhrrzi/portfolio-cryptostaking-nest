@@ -52,9 +52,7 @@ export class AuthController {
     type: LoginPayloadDto,
     description: 'User info with access token',
   })
-  async userLogin(
-    @Body() userLoginDto: UserLoginDto,
-  ): Promise<LoginPayloadDto> {
+  async login(@Body() userLoginDto: UserLoginDto): Promise<LoginPayloadDto> {
     const userEntity = await this.authService.validateUser(userLoginDto);
 
     const token = await this.authService.createAccessToken({
@@ -63,6 +61,17 @@ export class AuthController {
     });
 
     return new LoginPayloadDto(userEntity.toDto(), token);
+  }
+
+  @Post('logout')
+  @Auth([RoleType.USER])
+  @HttpCode(HttpStatus.OK)
+  async logout(): Promise<boolean> {
+    // revoke token
+    await this.authService.revokeAccessToken();
+
+    // response
+    return true;
   }
 
   @Version('1')
