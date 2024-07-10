@@ -64,5 +64,20 @@ describe('Auth-SIWE', () => {
       },
     });
     console.log(await logout_resp.json());
+
+    // wait for 3 seconds
+    await setTimeout(3000);
+
+    // re-logout  (should fail w/ UnauthorizedException)
+    console.log(
+      await (
+        await fetch(`${BASE_URL}/logout`, {
+          method: 'post',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+      ).json(),
+    );
   }, 100000);
 });

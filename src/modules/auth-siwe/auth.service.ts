@@ -5,7 +5,6 @@ import { RoleType, TokenType } from '@/constants';
 import { SiweInvalidSignatureException } from '@/modules/auth-siwe/exceptions/siwe-invalid-signature.exception';
 import { ApiConfigService } from '@/shared/services/api-config.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { REQUEST } from '@nestjs/core';
 import { CacheRedis } from 'cache-manager';
 import { Request } from 'express';
 import { Jwt, JwtPayload } from 'jsonwebtoken';
@@ -27,7 +26,6 @@ import { SiweExpiredMessageException } from './exceptions/siwe-expired-message.e
 export class AuthService {
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: CacheRedis,
-    @Inject(REQUEST) private request: Request,
     private jwtService: JwtService,
     private configService: ApiConfigService,
     private userService: UserService,
@@ -47,10 +45,16 @@ export class AuthService {
     });
   }
 
-  async validateUser(userLoginDto: UserLoginDto): Promise<UserEntity> {
+  async validateUser(
+    userLoginDto: UserLoginDto,
+    request: Request,
+  ): Promise<UserEntity> {
     // retrieve message from Redis
     const messageRedis = await this.cacheManager.get<string>(
-      this.parseSiweCacheKey(userLoginDto.wallet_address),
+      this.parseSiweCacheKey(
+        userLoginDto.wallet_address,
+        request.headers['user-agent']!,
+      ),
     );
 
     if (messageRedis === undefined) {
@@ -73,7 +77,12 @@ export class AuthService {
     }
 
     // revoke SIWE message (remove from redis)
-    this.cacheManager.del(this.parseSiweCacheKey(userLoginDto.wallet_address));
+    this.cacheManager.del(
+      this.parseSiweCacheKey(
+        userLoginDto.wallet_address,
+        request.headers['user-agent']!,
+      ),
+    );
 
     // get user
     let user: UserEntity | null;
@@ -113,34 +122,46 @@ export class AuthService {
     };
   }
 
-  async storeSiweCache(siweMessage: {
-    strMessage: string;
-    objMessage: SiweMessage;
-  }) {
+  async storeSiweCache(
+    siweMessage: {
+      strMessage: string;
+      objMessage: SiweMessage;
+    },
+    request: Request,
+  ) {
     // store message in Redis
     await this.cacheManager.set(
-      this.parseSiweCacheKey(siweMessage.objMessage.address),
+      this.parseSiweCacheKey(
+        siweMessage.objMessage.address,
+        request.headers['user-agent']!,
+      ),
       siweMessage.strMessage,
       { ttl: 20 }, // ttl = 20 seconds
     );
   }
 
-  parseSiweCacheKey(user_wallet_address: Address): string {
-    return `siweMessage[${user_wallet_address}$${this.request.headers['user-agent']}]`;
+  parseSiweCacheKey(
+    user_wallet_address: Address,
+    headers_user_agent: string,
+  ): string {
+    return `siweMessage[${user_wallet_address}$${headers_user_agent}]`;
   }
 
-  parseRevokeAccessTokenKey(user_wallet_address: Address): string {
-    return `accessToken[${user_wallet_address}$${this.request.headers['user-agent']}]`;
+  parseRevokeAccessTokenKey(
+    user_wallet_address: Address,
+    headers_user_agent: string,
+  ): string {
+    return `accessToken[${user_wallet_address}$${headers_user_agent}]`;
   }
 
-  async revokeAccessToken() {
+  async revokeAccessToken(user_wallet_address: Address, request: Request) {
     // validation
-    if (!this.request.headers.authorization) {
+    if (!request.headers.authorization) {
       throw new UnauthorizedException();
     }
 
     // extract token
-    const accessToken = this.request.headers.authorization.split(' ')[1];
+    const accessToken = request.headers.authorization.split(' ')[1];
     const jwtPayload = this.jwtService.decode<Jwt>(accessToken, {
       complete: true,
     });
@@ -151,18 +172,25 @@ export class AuthService {
     // store access token in Redis
     await this.cacheManager.set(
       this.parseRevokeAccessTokenKey(
-        (this.request.user! as UserEntity).wallet_address,
+        user_wallet_address,
+        request.headers['user-agent']!,
       ),
       accessToken,
       { ttl },
     );
   }
 
-  async isTokenRevoked(wallet_address: Address): Promise<boolean> {
+  async isTokenRevoked(
+    user_wallet_address: Address,
+    request: Request,
+  ): Promise<boolean> {
     return (
-      (await this.cacheManager.get(
-        this.parseRevokeAccessTokenKey(wallet_address),
-      )) !== undefined
+      (await this.cacheManager.get<string>(
+        this.parseRevokeAccessTokenKey(
+          user_wallet_address,
+          request.headers['user-agent']!,
+        ),
+      )) != undefined
     );
   }
 }

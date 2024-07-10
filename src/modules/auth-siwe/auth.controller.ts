@@ -6,12 +6,14 @@ import {
   HttpStatus,
   Post,
   Query,
+  Req,
   Version,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 
 import { RoleType } from '@/constants';
 import { Auth, AuthUser } from '@/decorators';
+import { Request } from 'express';
 import { UserDto } from '../user-v2/dtos/user.dto';
 import { UserEntity } from '../user-v2/user.entity';
 import { AuthService } from './auth.service';
@@ -33,6 +35,7 @@ export class AuthController {
   })
   async generateSiweMessage(
     @Query() param: UserRegisterDto,
+    @Req() request: Request,
   ): Promise<SiweMessagePayload> {
     // generate SIWE message
     const siweMessage = this.authService.generateSiweMessage(
@@ -40,7 +43,7 @@ export class AuthController {
     );
 
     // store message in Redis
-    await this.authService.storeSiweCache(siweMessage);
+    await this.authService.storeSiweCache(siweMessage, request);
 
     // return payload
     return new SiweMessagePayload(siweMessage.strMessage);
@@ -52,8 +55,14 @@ export class AuthController {
     type: LoginPayloadDto,
     description: 'User info with access token',
   })
-  async login(@Body() userLoginDto: UserLoginDto): Promise<LoginPayloadDto> {
-    const userEntity = await this.authService.validateUser(userLoginDto);
+  async login(
+    @Body() userLoginDto: UserLoginDto,
+    @Req() request: Request,
+  ): Promise<LoginPayloadDto> {
+    const userEntity = await this.authService.validateUser(
+      userLoginDto,
+      request,
+    );
 
     const token = await this.authService.createAccessToken({
       userId: userEntity.id,
@@ -66,9 +75,12 @@ export class AuthController {
   @Post('logout')
   @Auth([RoleType.USER])
   @HttpCode(HttpStatus.OK)
-  async logout(): Promise<boolean> {
+  async logout(@Req() request: Request): Promise<boolean> {
     // revoke token
-    await this.authService.revokeAccessToken();
+    await this.authService.revokeAccessToken(
+      (request.user as UserEntity).wallet_address,
+      request,
+    );
 
     // response
     return true;
