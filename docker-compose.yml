@@ -1,17 +1,17 @@
 version: '3'
 services:
-  portfolio-cryptostaking:
+  postgres:
     image: postgres
-    container_name: portfolio-cryptostaking
     restart: always
     environment:
+      POSTGRES_USERNAME: postgres
       POSTGRES_PASSWORD: postgres
       TZ: 'GMT'
       PGTZ: 'GMT'
     ports:
       - '5432:5432'
     volumes:
-      - portfolio-cryptostaking-vol:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
       - type: bind
         source: ./init-data.sh
         target: /docker-entrypoint-initdb.d/init-data.sh
@@ -31,5 +31,5 @@ services:
       - .env
 
 volumes:
-  portfolio-cryptostaking-vol:
+  pgdata:
     driver: local
