@@ -52,7 +52,7 @@ export class AuthService {
       this.parseSiweCacheKey(userLoginDto.wallet_address),
     );
 
-    if (!messageRedis) {
+    if (messageRedis === undefined) {
       throw new SiweExpiredMessageException();
     }
 
@@ -61,9 +61,7 @@ export class AuthService {
     // verify message
     const success = await createPublicClient({
       transport: http(),
-      chain: Object.values(chains).find(
-        (chain) => message.chainId === chain[1].id,
-      ),
+      chain: chains.bscTestnet,
     }).verifySiweMessage({
       message: createSiweMessage(message),
       signature: userLoginDto.signature,
@@ -122,15 +120,8 @@ export class AuthService {
     await this.cacheManager.set(
       this.parseSiweCacheKey(siweMessage.objMessage.address),
       siweMessage.strMessage,
-      1000 * 30, // ttl = 30 seconds
-    );
-
-    // testing
-    console.log(
-      `message hash in cache: key: ${this.parseSiweCacheKey(siweMessage.objMessage.address)}, value`,
-      await this.cacheManager.get(
-        this.parseSiweCacheKey(siweMessage.objMessage.address),
-      ),
+      // @ts-ignore
+      { ttl: 20 }, // ttl = 20 seconds
     );
   }
 

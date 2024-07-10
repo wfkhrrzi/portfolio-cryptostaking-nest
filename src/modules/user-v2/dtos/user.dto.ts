@@ -1,6 +1,6 @@
 import { AbstractDto } from '@/common/dto/abstract.dto';
 import { RoleType } from '@/constants';
-import { EnumFieldOptional, StringFieldOptional } from '@/decorators';
+import { EnumFieldOptional, WalletAddressField } from '@/decorators';
 import { Address } from 'viem';
 import { type UserEntity } from '../user.entity';
 
@@ -8,7 +8,7 @@ import { type UserEntity } from '../user.entity';
 export type UserDtoOptions = Partial<{ isActive: boolean }>;
 
 export class UserDto extends AbstractDto {
-  @StringFieldOptional({ nullable: true })
+  @WalletAddressField({ nullable: true })
   wallet_address!: Address;
 
   @EnumFieldOptional(() => RoleType)

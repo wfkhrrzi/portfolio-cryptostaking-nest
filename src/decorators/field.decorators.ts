@@ -12,8 +12,8 @@ import {
   IsNumber,
   IsPositive,
   IsString,
-  IsUrl,
   IsUUID,
+  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -475,5 +475,53 @@ export function DateFieldOptional(
   return applyDecorators(
     IsUndefinable(),
     DateField({ ...options, required: false }),
+  );
+}
+
+export function WalletAddressField(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  const decorators = [
+    StringField({
+      toLowerCase: true,
+      maxLength: 42,
+      minLength: 42,
+      ...options,
+    }),
+  ];
+
+  return applyDecorators(...decorators);
+}
+
+export function WalletAddressFieldOptional(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  return applyDecorators(
+    IsUndefinable(),
+    WalletAddressField({ ...options, required: false }),
+  );
+}
+
+export function SignatureField(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  const decorators = [
+    StringField({
+      toLowerCase: true,
+      maxLength: 132,
+      minLength: 132,
+      ...options,
+    }),
+  ];
+
+  return applyDecorators(...decorators);
+}
+
+export function SignatureFieldOptional(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  return applyDecorators(
+    IsUndefinable(),
+    SignatureField({ ...options, required: false }),
   );
 }

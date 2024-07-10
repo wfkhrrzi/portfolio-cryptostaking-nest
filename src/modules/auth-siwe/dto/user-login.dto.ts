@@ -1,9 +1,9 @@
-import { StringField } from '@/decorators';
+import { SignatureField, WalletAddressField } from '@/decorators';
 import { Address, Hex } from 'viem';
 export class UserLoginDto {
-  @StringField({ maxLength: 132, minLength: 132 })
+  @SignatureField()
   readonly signature!: Hex;
 
-  @StringField({ maxLength: 42, minLength: 42 })
+  @WalletAddressField()
   readonly wallet_address!: Address;
 }

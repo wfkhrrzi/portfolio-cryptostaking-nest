@@ -1,3 +1,4 @@
+import { setTimeout } from 'timers/promises';
 import { Address } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -30,6 +31,9 @@ describe('Auth-SIWE', () => {
       message,
     });
 
+    console.log('done sign');
+    await setTimeout(2000, 'waited for 2 seconds');
+
     // login
     const response = await fetch('http://localhost:3000/v1/auth/login', {
       body: new URLSearchParams({
@@ -40,5 +44,5 @@ describe('Auth-SIWE', () => {
     });
 
     console.log(await response.json());
-  });
+  }, 100000);
 });

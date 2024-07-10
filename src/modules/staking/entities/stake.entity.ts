@@ -1,11 +1,11 @@
 import { AbstractEntity } from '@/common/abstract.entity';
 import { UseDto } from '@/decorators';
 import { TokenEntity } from '@/modules/token/token.entity';
-import { UserEntity } from '@/modules/user/user.entity';
 import { Column, Entity, ManyToOne, OneToMany } from 'typeorm';
 import { Hex } from 'viem';
 import { StakeDto } from '../dtos/stake.dto';
 import { WithdrawalEntity } from './withdrawal.entity';
+import { UserEntity } from '@/modules/user-v2/user.entity';
 
 @Entity({ name: 'stakes' })
 @UseDto(StakeDto)

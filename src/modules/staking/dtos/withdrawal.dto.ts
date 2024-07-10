@@ -3,6 +3,7 @@ import {
   BooleanField,
   DateFieldOptional,
   EnumField,
+  SignatureField,
   StringField,
 } from '@/decorators';
 import { ApiProperty } from '@nestjs/swagger';
@@ -26,7 +27,7 @@ export class WithdrawalDto extends AbstractDto {
   @EnumField(() => WithdrawalType)
   type: WithdrawalType;
 
-  @StringField({ minLength: 132, maxLength: 132 })
+  @SignatureField()
   signature: Hex;
 
   @StringField({ minLength: 66, maxLength: 66 })

@@ -1,7 +1,7 @@
-import { StringField } from '@/decorators';
+import { WalletAddressField } from '@/decorators';
 import { Address } from 'viem';
 
 export class UserRegisterDto {
-  @StringField({ toLowerCase: true, maxLength: 42, minLength: 42 })
+  @WalletAddressField()
   readonly wallet_address!: Address;
 }

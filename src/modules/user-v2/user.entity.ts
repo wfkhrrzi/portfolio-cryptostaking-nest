@@ -8,7 +8,7 @@ import { PostEntity } from '../post/post.entity';
 import { StakeEntity } from '../staking/entities/stake.entity';
 import { UserDto, type UserDtoOptions } from './dtos/user.dto';
 
-@Entity({ name: 'users' })
+@Entity({ name: 'wallet_users' })
 @UseDto(UserDto)
 export class UserEntity extends AbstractEntity<UserDto, UserDtoOptions> {
   @Column({ type: 'varchar', length: 100 })
