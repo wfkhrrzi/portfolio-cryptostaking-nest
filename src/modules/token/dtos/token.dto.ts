@@ -1,19 +1,24 @@
 import { AbstractDto } from '@/common/dto/abstract.dto';
-import { NumberField, StringField, WalletAddressField } from '@/decorators';
+import {
+  NumberField,
+  NumberFieldOptional,
+  StringFieldOptional,
+  WalletAddressFieldOptional,
+} from '@/decorators';
 import { Address } from 'viem';
 import { TokenEntity } from '../token.entity';
 
 export class TokenDto extends AbstractDto {
-  @StringField({ maxLength: 50 })
+  @StringFieldOptional({ maxLength: 50 })
   name: string;
 
-  @StringField({ maxLength: 5 })
+  @StringFieldOptional({ maxLength: 5 })
   symbol: string;
 
-  @WalletAddressField()
+  @WalletAddressFieldOptional()
   contract_address: Address;
 
-  @NumberField({ isPositive: true })
+  @NumberFieldOptional({ isPositive: true })
   decimals: number;
 
   @NumberField({ isPositive: true })

@@ -1,6 +1,6 @@
 import './boilerplate.polyfill';
 
-import { Module } from '@nestjs/common';
+import { Module, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -18,6 +18,8 @@ import { PostModule } from './modules/post/post.module';
 import { StakingModule } from './modules/staking/staking.module';
 import { TokenModule } from './modules/token/token.module';
 import { UserModule } from './modules/user-v2/user.module';
+import { SeederModule } from './seeder/seeder.module';
+import { SeederService } from './seeder/seeder.service';
 import { ApiConfigService } from './shared/services/api-config.service';
 import { SharedModule } from './shared/shared.module';
 
@@ -62,6 +64,7 @@ import { SharedModule } from './shared/shared.module';
     StakingModule,
     TokenModule,
     CacheModule.registerAsync(RedisOptions),
+    SeederModule,
   ],
   providers: [
     {
@@ -70,4 +73,10 @@ import { SharedModule } from './shared/shared.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements OnApplicationBootstrap {
+  constructor(private seeder: SeederService) {}
+
+  async onApplicationBootstrap() {
+    await this.seeder.run();
+  }
+}

@@ -17,13 +17,13 @@ export class TokenEntity extends AbstractEntity<TokenDto> {
   @Column()
   decimals!: number; // whole number e.g. 3 (3%)
 
-  @Column({ length: 100 })
+  @Column({ length: 100, unique: true })
   contract_address!: Address;
 
   @Column()
   stake_APR!: number; // whole number e.g. 3 (3%)
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, type: 'double precision' })
   reward_rate_per_second?: number; // floating-point value
 
   @OneToMany(() => StakeEntity, (stakesEntity) => stakesEntity.token)

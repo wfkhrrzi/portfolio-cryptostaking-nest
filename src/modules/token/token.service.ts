@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { TokenDto } from './dtos/token.dto';
+import { DeepPartial, Repository } from 'typeorm';
+import { ContractFunctionName, createPublicClient, erc20Abi, http } from 'viem';
+import { bscTestnet } from 'viem/chains';
+import { CreateTokenDto } from './dtos/create-token.dto';
 import { UpdateTokenDto } from './dtos/update-token.dto';
 import { TokenNotFoundException } from './exceptions/token-not-found.exception';
 import { TokenEntity } from './token.entity';
@@ -13,8 +15,54 @@ export class TokenService {
     private tokenRepository: Repository<TokenEntity>,
   ) {}
 
-  async create(createTokenDto: TokenDto): Promise<TokenEntity> {
-    const token = this.tokenRepository.create(createTokenDto);
+  async create(createTokenDto: CreateTokenDto): Promise<TokenEntity> {
+    // if row exist, exit
+    let token: TokenEntity | null;
+
+    token = await this.tokenRepository.findOne({
+      where: {
+        contract_address: createTokenDto.contract_address,
+      },
+    });
+    if (token)
+      throw new ConflictException(`Token '${token.symbol}' is already existed`);
+
+    // fetch token data from contract
+    const token_attr = ['name', 'symbol', 'decimals'] as ContractFunctionName<
+      typeof erc20Abi,
+      'view'
+    >[];
+
+    const token_attr_result = (
+      await createPublicClient({
+        // (FIXME: needed to be injected as provider)
+        transport: http(),
+        chain: bscTestnet,
+      }).multicall({
+        allowFailure: false,
+        contracts: token_attr.map((functionName) => ({
+          abi: erc20Abi,
+          address: createTokenDto.contract_address,
+          functionName,
+        })),
+      })
+    ).reduce<DeepPartial<TokenEntity>>(
+      (createTokenDto, attr, i) => ({
+        ...createTokenDto,
+        [token_attr[i]]: attr,
+      }),
+      createTokenDto,
+    );
+
+    const reward_rate_per_second =
+      createTokenDto.stake_APR / 100 / (365 * 24 * 60 * 60);
+
+    // create token
+    token = this.tokenRepository.create({
+      ...createTokenDto,
+      ...token_attr_result,
+      reward_rate_per_second,
+    });
 
     await this.tokenRepository.save(token);
 
