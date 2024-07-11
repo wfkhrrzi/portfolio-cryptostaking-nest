@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-null */
 import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, type ApiPropertyOptions } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDate,
@@ -22,6 +22,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+import { PositiveBigInt } from 'class-validator-extended';
 import { type Constructor } from '../types';
 import { ApiEnumProperty, ApiUUIDProperty } from './property.decorators';
 import {
@@ -37,6 +38,7 @@ import {
   IsPhoneNumber,
   IsTmpKey as IsTemporaryKey,
   IsUndefinable,
+  isHexDecimal,
 } from './validator.decorators';
 
 interface IFieldOptions {
@@ -488,6 +490,7 @@ export function WalletAddressField(
       minLength: 42,
       ...options,
     }),
+    isHexDecimal,
   ];
 
   return applyDecorators(...decorators);
@@ -512,6 +515,7 @@ export function SignatureField(
       minLength: 132,
       ...options,
     }),
+    isHexDecimal,
   ];
 
   return applyDecorators(...decorators);
@@ -523,5 +527,31 @@ export function SignatureFieldOptional(
   return applyDecorators(
     IsUndefinable(),
     SignatureField({ ...options, required: false }),
+  );
+}
+
+export function BigintField(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  const decorators = [
+    StringField({ ...options }),
+    PositiveBigInt,
+    Transform(
+      (param) => {
+        return BigInt(param.value);
+      },
+      { toClassOnly: true },
+    ),
+  ];
+
+  return applyDecorators(...decorators);
+}
+
+export function BigintFieldOptional(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  return applyDecorators(
+    IsUndefinable(),
+    BigintField({ ...options, required: false }),
   );
 }

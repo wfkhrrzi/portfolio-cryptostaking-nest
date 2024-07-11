@@ -1,4 +1,8 @@
-import { NumberFieldOptional, StringFieldOptional } from '@/decorators';
+import {
+  NumberFieldOptional,
+  StringFieldOptional,
+  WalletAddressFieldOptional,
+} from '@/decorators';
 import { Address } from 'viem';
 
 export class UpdateTokenDto {
@@ -8,9 +12,9 @@ export class UpdateTokenDto {
   @StringFieldOptional({ maxLength: 5 })
   symbol?: string;
 
-  @StringFieldOptional({ minLength: 42, maxLength: 42 })
+  @WalletAddressFieldOptional()
   contract_address?: Address;
 
-  @NumberFieldOptional()
+  @NumberFieldOptional({ isPositive: true })
   stake_APR?: number;
 }

@@ -1,12 +1,12 @@
 import { AbstractDto } from '@/common/dto/abstract.dto';
 import {
+  BigintField,
   BooleanField,
   DateFieldOptional,
   EnumField,
   SignatureField,
   StringField,
 } from '@/decorators';
-import { ApiProperty } from '@nestjs/swagger';
 import { Hex } from 'viem';
 import { WithdrawalEntity } from '../entities/withdrawal.entity';
 import { WithdrawalType } from '../enums/withdrawal-type';
@@ -21,7 +21,7 @@ export class WithdrawalDto extends AbstractDto {
   @DateFieldOptional()
   fulfilled_at: Date | null;
 
-  @ApiProperty()
+  @BigintField()
   amount: bigint;
 
   @EnumField(() => WithdrawalType)
