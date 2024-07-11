@@ -9,10 +9,11 @@ import {
   Req,
   Version,
 } from '@nestjs/common';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiTags } from '@nestjs/swagger';
 
 import { RoleType } from '@/constants';
 import { Auth, AuthUser } from '@/decorators';
+import { ApiOkResponse } from '@/decorators/api-ok-response.decorator';
 import { Request } from 'express';
 import { UserDto } from '../user-v2/dtos/user.dto';
 import { UserEntity } from '../user-v2/user.entity';

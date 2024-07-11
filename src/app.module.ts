@@ -9,7 +9,9 @@ import { DataSource } from 'typeorm';
 import { addTransactionalDataSource } from 'typeorm-transactional';
 
 import { CacheModule } from '@nestjs/cache-manager';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { RedisOptions } from './configs/app-options.constants';
+import { ApiResponseInterceptor } from './interceptors/api-response-interceptor.service';
 import { AuthModule } from './modules/auth-siwe/auth.module';
 import { HealthCheckerModule } from './modules/health-checker/health-checker.module';
 import { PostModule } from './modules/post/post.module';
@@ -61,6 +63,11 @@ import { SharedModule } from './shared/shared.module';
     TokenModule,
     CacheModule.registerAsync(RedisOptions),
   ],
-  providers: [],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ApiResponseInterceptor,
+    },
+  ],
 })
 export class AppModule {}
