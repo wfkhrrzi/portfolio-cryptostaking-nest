@@ -1,4 +1,4 @@
-import { IApiResponseFormat } from '@/interfaces/i-api-response-format';
+import { IApiResponseFormat } from '@/interfaces';
 import { setTimeout } from 'timers/promises';
 import { Address } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';

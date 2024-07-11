@@ -1,5 +1,5 @@
 import { NumberField, StringField } from '@/decorators';
-import { IApiResponseFormat } from '@/interfaces/i-api-response-format';
+import { IApiResponseFormat } from '@/interfaces';
 
 export class ApiResponseDTO<DTO> implements IApiResponseFormat<DTO> {
   @NumberField({ example: 200 })

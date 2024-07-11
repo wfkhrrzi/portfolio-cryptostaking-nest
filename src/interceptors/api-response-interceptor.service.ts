@@ -1,3 +1,4 @@
+import { IApiResponseFormat } from '@/interfaces';
 import {
   Injectable,
   type CallHandler,
@@ -5,7 +6,6 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 
-import { IApiResponseFormat } from '@/interfaces/i-api-response-format';
 import { Response } from 'express';
 import { map, Observable } from 'rxjs';
 
