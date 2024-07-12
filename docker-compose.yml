@@ -6,8 +6,8 @@ services:
     environment:
       POSTGRES_USERNAME: postgres
       POSTGRES_PASSWORD: postgres
-      TZ: 'GMT'
-      PGTZ: 'GMT'
+      TZ: 'Asia/Kuala_Lumpur'
+      PGTZ: 'Asia/Kuala_Lumpur'
     ports:
       - '5432:5432'
     volumes:

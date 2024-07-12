@@ -1,6 +1,6 @@
 import './boilerplate.polyfill';
 
-import { Module, OnApplicationBootstrap } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -16,9 +16,9 @@ import { RedisOptions } from './configs/app-options.constants';
 import { ApiResponseInterceptor } from './interceptors/api-response-interceptor.service';
 import { AuthModule } from './modules/auth-siwe/auth.module';
 import { HealthCheckerModule } from './modules/health-checker/health-checker.module';
+import { NetworkChainModule } from './modules/network-chain/network-chain.module';
 import { PostModule } from './modules/post/post.module';
 import { SeederModule } from './modules/seeder/seeder.module';
-import { SeederService } from './modules/seeder/seeder.service';
 import { StakingModule } from './modules/staking/staking.module';
 import { TokenModule } from './modules/token/token.module';
 import { UserModule } from './modules/user-v2/user.module';
@@ -28,9 +28,6 @@ import { SharedModule } from './shared/shared.module';
 
 @Module({
   imports: [
-    AuthModule,
-    UserModule,
-    PostModule,
     ClsModule.forRoot({
       global: true,
       middleware: {
@@ -63,17 +60,14 @@ import { SharedModule } from './shared/shared.module';
         );
       },
     }),
-    HealthCheckerModule,
-    StakingModule,
-    TokenModule,
     CacheModule.registerAsync(RedisOptions),
-    SeederModule,
     ViemModule.forRootAsync({
       useFactory: async (configService: ApiConfigService) => {
         if (configService.isLocalContractTest) {
           // return local config
           return {
             chains: [hardhat],
+            http_transports: [http('http://127.0.0.1:8545/')],
           };
         }
         // return testnet config
@@ -91,6 +85,14 @@ import { SharedModule } from './shared/shared.module';
       },
       inject: [ApiConfigService],
     }),
+    SeederModule,
+    HealthCheckerModule,
+    AuthModule,
+    UserModule,
+    PostModule,
+    TokenModule,
+    StakingModule,
+    NetworkChainModule,
   ],
   providers: [
     {
@@ -99,10 +101,4 @@ import { SharedModule } from './shared/shared.module';
     },
   ],
 })
-export class AppModule implements OnApplicationBootstrap {
-  constructor(private seeder: SeederService) {}
-
-  async onApplicationBootstrap() {
-    await this.seeder.run();
-  }
-}
+export class AppModule {}

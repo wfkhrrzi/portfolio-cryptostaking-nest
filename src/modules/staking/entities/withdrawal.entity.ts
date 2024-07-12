@@ -12,7 +12,7 @@ export class WithdrawalEntity extends AbstractEntity<WithdrawalDto> {
   @Column({ default: false })
   is_fulfilled!: boolean;
 
-  @Column({ type: 'varchar', length: '100', unique: true })
+  @Column({ type: 'varchar', length: '100', unique: true, nullable: true })
   fulfilled_tx_hash!: Hex;
 
   @Column({ type: 'timestamp without time zone', nullable: true })
@@ -24,15 +24,15 @@ export class WithdrawalEntity extends AbstractEntity<WithdrawalDto> {
   @Column({ type: 'enum', enum: WithdrawalType })
   type!: WithdrawalType;
 
-  @Column({ type: 'varchar', length: '100' })
+  @Column({ type: 'varchar', length: '100', unique: true })
   signature!: Hex;
 
-  @Column({ type: 'varchar', length: '100' })
+  @Column({ type: 'varchar', length: '100', nullable: true })
   signature_hash!: Hex;
 
-  @Column({ type: 'varchar' })
+  @Column({ type: 'varchar', nullable: true })
   signature_message!: string;
 
   @ManyToOne(() => StakeEntity, (stakesEntity) => stakesEntity.withdrawals)
-  stake?: StakeEntity[];
+  stake?: StakeEntity;
 }

@@ -1,9 +1,11 @@
+import { ChainNotSupportedException } from '@/exceptions/chain-not-supported.exception';
 import { DuplicateResourceCreated } from '@/exceptions/duplicate-resource-created.exception';
 import { ApiConfigService } from '@/shared/services/api-config.service';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { ContractFunctionName, erc20Abi } from 'viem';
+import { NetworkChainService } from '../network-chain/network-chain.service';
 import { ViemService } from '../viem/viem.service';
 import { CreateTokenDto } from './dtos/create-token.dto';
 import { UpdateTokenDto } from './dtos/update-token.dto';
@@ -15,12 +17,20 @@ export class TokenService {
   constructor(
     @InjectRepository(TokenEntity)
     private tokenRepository: Repository<TokenEntity>,
-    private viemService: ViemService,
     private configService: ApiConfigService,
+    private networkChainService: NetworkChainService,
+    private viemService: ViemService,
   ) {}
 
   async create(createTokenDto: CreateTokenDto): Promise<TokenEntity> {
-    const client = this.viemService.getPublicClient(createTokenDto.chain_id);
+    // get chain
+    const chain = await this.networkChainService.findOne(
+      createTokenDto.chain_id,
+    );
+
+    if (!chain) throw new ChainNotSupportedException(createTokenDto.chain_id);
+
+    const client = this.viemService.getPublicClient(chain.chain_id);
 
     // if row exist, exit
     let token: TokenEntity | null;
@@ -69,6 +79,7 @@ export class TokenService {
       ...createTokenDto,
       ...token_attr_result,
       reward_rate_per_second,
+      chain,
     });
 
     await this.tokenRepository.save(token);
@@ -77,7 +88,9 @@ export class TokenService {
   }
 
   async findAll() {
-    const tokens = await this.tokenRepository.find();
+    const tokens = await this.tokenRepository.find({
+      relations: { chain: true },
+    });
 
     return tokens;
   }

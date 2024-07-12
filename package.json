@@ -16,7 +16,7 @@
     "new": "hygen new",
     "migration:revert": "yarn run typeorm migration:revert -d ormconfig",
     "schema:drop": "yarn run typeorm schema:drop -d ormconfig",
-    "watch:dev": "ts-node-dev -r tsconfig-paths/register src/main.ts",
+    "watch:dev": "npm run docker-compose:down && npm run docker-compose:up && ts-node-dev -r tsconfig-paths/register src/main.ts",
     "watch:localTesting": "npm run docker-compose:down && npm run docker-compose:up && NODE_ENV=localContractTest ts-node-dev -r tsconfig-paths/register src/main.ts",
     "debug:dev": "cross-env TS_NODE_CACHE=false ts-node-dev -r tsconfig-paths/register  --inspect --ignore '/^src/.*\\.spec\\.ts$/' src/main.ts",
     "docker-compose:up": "docker compose up -d",

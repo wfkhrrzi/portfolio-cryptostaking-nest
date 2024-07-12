@@ -110,19 +110,19 @@ export default [
     name: 'ClaimUSDTReward',
     type: 'event',
   },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: false,
-        internalType: 'uint64',
-        name: 'version',
-        type: 'uint64',
-      },
-    ],
-    name: 'Initialized',
-    type: 'event',
-  },
+  //   {
+  //     anonymous: false,
+  //     inputs: [
+  //       {
+  //         indexed: false,
+  //         internalType: 'uint64',
+  //         name: 'version',
+  //         type: 'uint64',
+  //       },
+  //     ],
+  //     name: 'Initialized',
+  //     type: 'event',
+  //   },
   {
     anonymous: false,
     inputs: [

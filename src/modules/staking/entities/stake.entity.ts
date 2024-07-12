@@ -28,7 +28,9 @@ export class StakeEntity extends AbstractEntity<StakeDto> {
   @Column({ type: 'timestamp without time zone', default: 'now()' })
   reward_updated_at!: Date;
 
-  @ManyToOne(() => UserEntity, (userEntity) => userEntity.stakes)
+  @ManyToOne(() => UserEntity, (userEntity) => userEntity.stakes, {
+    cascade: true,
+  })
   user?: UserEntity;
 
   @ManyToOne(() => TokenEntity, (tokenEntity) => tokenEntity.stakes)

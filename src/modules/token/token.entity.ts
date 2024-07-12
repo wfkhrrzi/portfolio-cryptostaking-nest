@@ -1,8 +1,9 @@
 import { AbstractEntity } from '@/common/abstract.entity';
 import { UseDto } from '@/decorators';
-import { Column, Entity, OneToMany } from 'typeorm';
+import { Column, Entity, ManyToOne, OneToMany } from 'typeorm';
 import { Address } from 'viem';
 import { StakeEntity } from '../staking/entities/stake.entity';
+import { NetworkChainEntity } from '../network-chain/network-chain.entity';
 import { TokenDto } from './dtos/token.dto';
 
 @Entity({ name: 'tokens' })
@@ -27,5 +28,8 @@ export class TokenEntity extends AbstractEntity<TokenDto> {
   reward_rate_per_second?: number; // floating-point value
 
   @OneToMany(() => StakeEntity, (stakesEntity) => stakesEntity.token)
-  stakes!: StakeEntity;
+  stakes!: StakeEntity[];
+
+  @ManyToOne(() => NetworkChainEntity, (chainEntity) => chainEntity.tokens)
+  chain!: NetworkChainEntity;
 }
