@@ -18,6 +18,8 @@
     "schema:drop": "yarn run typeorm schema:drop -d ormconfig",
     "watch:dev": "ts-node-dev -r tsconfig-paths/register src/main.ts",
     "debug:dev": "cross-env TS_NODE_CACHE=false ts-node-dev -r tsconfig-paths/register  --inspect --ignore '/^src/.*\\.spec\\.ts$/' src/main.ts",
+    "docker-compose:up": "docker compose up -d",
+    "docker-compose:down": "docker compose down --volume",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint --fix . --ext .ts",
     "test": "NODE_ENV=test jest",
