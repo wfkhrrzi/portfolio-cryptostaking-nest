@@ -1,4 +1,5 @@
 import { DuplicateResourceCreated } from '@/exceptions/duplicate-resource-created.exception';
+import { ApiConfigService } from '@/shared/services/api-config.service';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
@@ -15,6 +16,7 @@ export class TokenService {
     @InjectRepository(TokenEntity)
     private tokenRepository: Repository<TokenEntity>,
     private viemService: ViemService,
+    private configService: ApiConfigService,
   ) {}
 
   async create(createTokenDto: CreateTokenDto): Promise<TokenEntity> {
@@ -47,6 +49,9 @@ export class TokenService {
           address: createTokenDto.contract_address,
           functionName,
         })),
+        multicallAddress: this.configService.isLocalContractTest
+          ? this.configService.localContract.multicall_contract
+          : undefined,
       })
     ).reduce<DeepPartial<TokenEntity>>(
       (createTokenDto, attr, i) => ({

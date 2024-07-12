@@ -11,7 +11,7 @@ import { addTransactionalDataSource } from 'typeorm-transactional';
 import { CacheModule } from '@nestjs/cache-manager';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { http } from 'viem';
-import { bsc, bscTestnet } from 'viem/chains';
+import { bsc, bscTestnet, hardhat } from 'viem/chains';
 import { RedisOptions } from './configs/app-options.constants';
 import { ApiResponseInterceptor } from './interceptors/api-response-interceptor.service';
 import { AuthModule } from './modules/auth-siwe/auth.module';
@@ -70,15 +70,24 @@ import { SharedModule } from './shared/shared.module';
     SeederModule,
     ViemModule.forRootAsync({
       useFactory: async (configService: ApiConfigService) => {
-        const nodeRealHttp = http(
-          `https://bsc-testnet.nodereal.io/v1/${configService.nodeRealConfig.key}`,
-          { batch: { batchSize: 300 } },
-        );
-
-        return {
-          chains: [bscTestnet, bsc],
-          http_transports: [http(), nodeRealHttp],
-        };
+        if (configService.isLocalContractTest) {
+          // return local config
+          return {
+            chains: [hardhat],
+          };
+        }
+        // return testnet config
+        else
+          return {
+            chains: [bscTestnet, bsc],
+            http_transports: [
+              http(),
+              http(
+                `https://bsc-testnet.nodereal.io/v1/${configService.nodeRealConfig.key}`,
+                { batch: { batchSize: 300 } },
+              ),
+            ],
+          };
       },
       inject: [ApiConfigService],
     }),

@@ -5,6 +5,7 @@ import { type TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { isNil } from 'lodash';
 import { default as parse, type Units } from 'parse-duration';
 
+import { isAddress } from 'viem';
 import { UserSubscriber } from '../../entity-subscribers/user-subscriber';
 import { SnakeNamingStrategy } from '../../snake-naming.strategy';
 
@@ -22,6 +23,10 @@ export class ApiConfigService {
 
   get isTest(): boolean {
     return this.nodeEnv === 'test';
+  }
+
+  get isLocalContractTest(): boolean {
+    return this.nodeEnv === 'localContractTest';
   }
 
   private getNumber(key: string): number {
@@ -144,6 +149,27 @@ export class ApiConfigService {
     return {
       key: this.getString('NODEREAL_KEY'),
     };
+  }
+
+  get localContract() {
+    const cryptostaking_contract = this.getString(
+      'LOCAL_CRYPTOSTAKING_CONTRACT',
+    );
+    const usdt_contract = this.getString('LOCAL_USDT_CONTRACT');
+    const multicall_contract = this.getString('LOCAL_MULTICALL_CONTRACT');
+
+    if (
+      isAddress(cryptostaking_contract) &&
+      isAddress(usdt_contract) &&
+      isAddress(multicall_contract)
+    )
+      return {
+        cryptostaking_contract,
+        usdt_contract,
+        multicall_contract,
+      };
+
+    throw new Error('Invalid local contract addresses');
   }
 
   private get(key: string): string {
