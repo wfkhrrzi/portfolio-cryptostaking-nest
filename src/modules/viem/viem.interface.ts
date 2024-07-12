@@ -1,8 +1,9 @@
 import { ModuleMetadata } from '@nestjs/common';
-import { Chain } from 'viem';
+import { Chain, HttpTransport } from 'viem';
 
 export interface ViemModuleOptions {
   chains: Chain[];
+  http_transports?: HttpTransport[];
 }
 
 export interface ViemModuleAsyncOptions

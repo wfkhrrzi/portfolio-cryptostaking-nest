@@ -5,7 +5,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CacheRedis } from 'cache-manager';
 import { Repository } from 'typeorm';
-import { bsc } from 'viem/chains';
+import { bscTestnet } from 'viem/chains';
 import { TokenEntity } from '../token/token.entity';
 import { UserEntity } from '../user-v2/user.entity';
 import { ViemService } from '../viem/viem.service';
@@ -73,7 +73,7 @@ export class StakingService {
 
       // init
       const key$currentReadBlock = `stakeReader_currentBlockNumber_${token.id}`;
-      const client = this.viemService.getPublicClient(bsc.id);
+      const client = this.viemService.getPublicClient(bscTestnet.id);
 
       // get range of blocks to read from
       const latestBlock: bigint = await client.getBlockNumber();
@@ -95,15 +95,21 @@ export class StakingService {
         eventName: 'StakeUSDT',
       });
 
+      //   fetch blocks
+      const blocks = await Promise.all(
+        [...new Set(logs.map((log) => log.blockHash))].map((blockHash) =>
+          client.getBlock({ blockHash }),
+        ),
+      );
+
+      if (!blocks) throw new Error('blocks == null');
+
       // parse stakes
       logs.map(async (log) => {
-        // get transaction receipt
-        const txTime = (
-          await client.getBlock({
-            blockHash: log.blockHash,
-            includeTransactions: false,
-          })
-        ).timestamp;
+        // get timestamp
+        const txTime: bigint = blocks.find(
+          (block) => block.hash === log.blockHash,
+        )!.timestamp;
 
         // get user
         const user = await this.userRepository.findOne({

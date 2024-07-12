@@ -1,7 +1,7 @@
 import { chains } from '@/constants/chains';
 import { ChainNotSupportedException } from '@/exceptions/chain-not-supported.exception';
 import { Inject, Injectable } from '@nestjs/common';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, fallback, http } from 'viem';
 import { VIEM_MODULE_OPTIONS } from './viem.constants';
 import { ViemModuleOptions } from './viem.interface';
 
@@ -24,7 +24,9 @@ export class ViemService {
 
     // return public client
     return createPublicClient({
-      transport: http(),
+      transport: this.options.http_transports
+        ? fallback(this.options.http_transports)
+        : http(undefined, { batch: true }),
       chain: chains.find((chain) => chain.id == chainId),
     });
   }

@@ -10,6 +10,7 @@ import { addTransactionalDataSource } from 'typeorm-transactional';
 
 import { CacheModule } from '@nestjs/cache-manager';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+import { http } from 'viem';
 import { bsc, bscTestnet } from 'viem/chains';
 import { RedisOptions } from './configs/app-options.constants';
 import { ApiResponseInterceptor } from './interceptors/api-response-interceptor.service';
@@ -67,8 +68,19 @@ import { SharedModule } from './shared/shared.module';
     TokenModule,
     CacheModule.registerAsync(RedisOptions),
     SeederModule,
-    ViemModule.forRoot({
-      chains: [bscTestnet, bsc],
+    ViemModule.forRootAsync({
+      useFactory: async (configService: ApiConfigService) => {
+        const nodeRealHttp = http(
+          `https://bsc-testnet.nodereal.io/v1/${configService.nodeRealConfig.key}`,
+          { batch: { batchSize: 300 } },
+        );
+
+        return {
+          chains: [bscTestnet, bsc],
+          http_transports: [http(), nodeRealHttp],
+        };
+      },
+      inject: [ApiConfigService],
     }),
   ],
   providers: [

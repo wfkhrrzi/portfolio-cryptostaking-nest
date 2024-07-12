@@ -140,6 +140,12 @@ export class ApiConfigService {
     };
   }
 
+  get nodeRealConfig() {
+    return {
+      key: this.getString('NODEREAL_KEY'),
+    };
+  }
+
   private get(key: string): string {
     const value = this.configService.get<string>(key);
 
