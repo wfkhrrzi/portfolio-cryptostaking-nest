@@ -8,8 +8,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { CacheRedis } from 'cache-manager';
 import { Request } from 'express';
 import { Jwt, JwtPayload } from 'jsonwebtoken';
-import { Address, createPublicClient, http } from 'viem';
-import * as chains from 'viem/chains';
+import { Address } from 'viem';
 import {
   SiweMessage,
   createSiweMessage,
@@ -18,6 +17,7 @@ import {
 } from 'viem/siwe';
 import { UserEntity } from '../user-v2/user.entity';
 import { UserService } from '../user-v2/user.service';
+import { ViemService } from '../viem/viem.service';
 import { TokenPayloadDto } from './dto/token-payload.dto';
 import { type UserLoginDto } from './dto/user-login.dto';
 import { SiweExpiredMessageException } from './exceptions/siwe-expired-message.exception';
@@ -29,6 +29,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ApiConfigService,
     private userService: UserService,
+    private viemService: ViemService,
   ) {}
 
   async createAccessToken(data: {
@@ -49,6 +50,8 @@ export class AuthService {
     userLoginDto: UserLoginDto,
     request: Request,
   ): Promise<UserEntity> {
+    const client = this.viemService.getPublicClient(userLoginDto.chain_id);
+
     // retrieve message from Redis
     const messageRedis = await this.cacheManager.get<string>(
       this.parseSiweCacheKey(
@@ -64,10 +67,7 @@ export class AuthService {
     const message: SiweMessage = parseSiweMessage(messageRedis) as SiweMessage;
 
     // verify message
-    const success = await createPublicClient({
-      transport: http(),
-      chain: chains.bscTestnet,
-    }).verifySiweMessage({
+    const success = await client.verifySiweMessage({
       message: createSiweMessage(message),
       signature: userLoginDto.signature,
     });
@@ -92,23 +92,24 @@ export class AuthService {
 
     // create user if not existed
     if (!user) {
-      user = await this.userService.createUser({
-        wallet_address: userLoginDto.wallet_address as Address,
-      });
+      user = await this.userService.createUser(userLoginDto);
     }
 
     // return user
     return user;
   }
 
-  generateSiweMessage(wallet_address: Address): {
+  generateSiweMessage(
+    wallet_address: Address,
+    chainId: number,
+  ): {
     strMessage: string;
     objMessage: SiweMessage;
   } {
     // create message (including nonce)
     const message: SiweMessage = {
       address: wallet_address,
-      chainId: chains.bscTestnet.id,
+      chainId,
       domain: 'localhost',
       nonce: generateSiweNonce(),
       uri: 'http://localhost:3000/auth/login',

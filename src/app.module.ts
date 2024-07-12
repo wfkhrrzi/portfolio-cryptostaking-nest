@@ -10,16 +10,18 @@ import { addTransactionalDataSource } from 'typeorm-transactional';
 
 import { CacheModule } from '@nestjs/cache-manager';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+import { bsc, bscTestnet } from 'viem/chains';
 import { RedisOptions } from './configs/app-options.constants';
 import { ApiResponseInterceptor } from './interceptors/api-response-interceptor.service';
 import { AuthModule } from './modules/auth-siwe/auth.module';
 import { HealthCheckerModule } from './modules/health-checker/health-checker.module';
 import { PostModule } from './modules/post/post.module';
+import { SeederModule } from './modules/seeder/seeder.module';
+import { SeederService } from './modules/seeder/seeder.service';
 import { StakingModule } from './modules/staking/staking.module';
 import { TokenModule } from './modules/token/token.module';
 import { UserModule } from './modules/user-v2/user.module';
-import { SeederModule } from './modules/seeder/seeder.module';
-import { SeederService } from './modules/seeder/seeder.service';
+import { ViemModule } from './modules/viem/viem.module';
 import { ApiConfigService } from './shared/services/api-config.service';
 import { SharedModule } from './shared/shared.module';
 
@@ -65,6 +67,9 @@ import { SharedModule } from './shared/shared.module';
     TokenModule,
     CacheModule.registerAsync(RedisOptions),
     SeederModule,
+    ViemModule.forRoot({
+      chains: [bscTestnet, bsc],
+    }),
   ],
   providers: [
     {

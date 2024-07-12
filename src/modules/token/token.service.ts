@@ -2,8 +2,8 @@ import { DuplicateResourceCreated } from '@/exceptions/duplicate-resource-create
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
-import { ContractFunctionName, createPublicClient, erc20Abi, http } from 'viem';
-import { bscTestnet } from 'viem/chains';
+import { ContractFunctionName, erc20Abi } from 'viem';
+import { ViemService } from '../viem/viem.service';
 import { CreateTokenDto } from './dtos/create-token.dto';
 import { UpdateTokenDto } from './dtos/update-token.dto';
 import { TokenNotFoundException } from './exceptions/token-not-found.exception';
@@ -14,9 +14,12 @@ export class TokenService {
   constructor(
     @InjectRepository(TokenEntity)
     private tokenRepository: Repository<TokenEntity>,
+    private viemService: ViemService,
   ) {}
 
   async create(createTokenDto: CreateTokenDto): Promise<TokenEntity> {
+    const client = this.viemService.getPublicClient(createTokenDto.chain_id);
+
     // if row exist, exit
     let token: TokenEntity | null;
 
@@ -37,11 +40,7 @@ export class TokenService {
     >[];
 
     const token_attr_result = (
-      await createPublicClient({
-        // (FIXME: needed to be injected as provider)
-        transport: http(),
-        chain: bscTestnet,
-      }).multicall({
+      await client.multicall({
         allowFailure: false,
         contracts: token_attr.map((functionName) => ({
           abi: erc20Abi,

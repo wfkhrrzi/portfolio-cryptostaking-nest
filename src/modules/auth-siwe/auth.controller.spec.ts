@@ -2,19 +2,24 @@ import { IApiResponseFormat } from '@/interfaces';
 import { setTimeout } from 'timers/promises';
 import { Address } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { bscTestnet } from 'viem/chains';
 import { LoginPayloadDto } from './dto/login-payload.dto';
 import { SiweMessagePayload } from './dto/siwe-message-payload.dto';
 
 const BASE_URL = 'http://localhost:3000/v1/auth';
 
+const CHAIN = bscTestnet;
+
 describe('Auth-SIWE', () => {
   async function generateSiweMessage(wallet_address: Address) {
     const getURL = new URL(`${BASE_URL}/siweMessage`);
     getURL.searchParams.set('wallet_address', wallet_address);
+    getURL.searchParams.set('chain_id', CHAIN.id.toString());
 
-    const response = await fetch(getURL);
+    const response = await (await fetch(getURL)).json();
+    console.log(JSON.stringify(response, undefined, 4));
 
-    return (await response.json()) as IApiResponseFormat<SiweMessagePayload>;
+    return response as IApiResponseFormat<SiweMessagePayload>;
   }
 
   it.skip('Generate SIWE message', async function () {
@@ -46,12 +51,15 @@ describe('Auth-SIWE', () => {
       body: new URLSearchParams({
         signature,
         wallet_address,
+        chain_id: CHAIN.id.toString(),
       }),
       method: 'post',
     });
 
     const login_payload =
       (await login_resp.json()) as IApiResponseFormat<LoginPayloadDto>;
+
+    console.log(login_payload);
 
     const accessToken: string = login_payload.data.token.accessToken;
     console.log('accessToken:', accessToken);

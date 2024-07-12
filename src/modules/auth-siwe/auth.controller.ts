@@ -41,6 +41,7 @@ export class AuthController {
     // generate SIWE message
     const siweMessage = this.authService.generateSiweMessage(
       param.wallet_address,
+      param.chain_id,
     );
 
     // store message in Redis

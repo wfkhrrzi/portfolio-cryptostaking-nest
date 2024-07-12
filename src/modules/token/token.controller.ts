@@ -10,6 +10,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { CreateTokenDto } from './dtos/create-token.dto';
 import { TokenDto } from './dtos/token.dto';
 import { UpdateTokenDto } from './dtos/update-token.dto';
 import { TokenService } from './token.service';
@@ -21,7 +22,7 @@ export class TokenController {
 
   @Post()
   @Auth([RoleType.ADMIN])
-  async create(@Body() createTokenDto: TokenDto): Promise<TokenDto> {
+  async create(@Body() createTokenDto: CreateTokenDto): Promise<TokenDto> {
     const token = await this.tokenService.create(createTokenDto);
 
     return token.toDto();

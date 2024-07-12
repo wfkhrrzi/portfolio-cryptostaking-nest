@@ -5,10 +5,10 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CacheRedis } from 'cache-manager';
 import { Repository } from 'typeorm';
-import { createPublicClient, http } from 'viem';
 import { bsc } from 'viem/chains';
 import { TokenEntity } from '../token/token.entity';
 import { UserEntity } from '../user-v2/user.entity';
+import { ViemService } from '../viem/viem.service';
 import { StakeDto } from './dtos/stake.dto';
 import { StakeEntity } from './entities/stake.entity';
 
@@ -22,6 +22,7 @@ export class StakingService {
     @InjectRepository(TokenEntity)
     private tokenRepository: Repository<TokenEntity>,
     @Inject(CACHE_MANAGER) private cacheManager: CacheRedis,
+    private viemService: ViemService,
   ) {}
 
   async createStake(createStake: StakeDto) {
@@ -72,10 +73,7 @@ export class StakingService {
 
       // init
       const key$currentReadBlock = `stakeReader_currentBlockNumber_${token.id}`;
-      const client = createPublicClient({
-        transport: http(),
-        chain: bsc,
-      });
+      const client = this.viemService.getPublicClient(bsc.id);
 
       // get range of blocks to read from
       const latestBlock: bigint = await client.getBlockNumber();
