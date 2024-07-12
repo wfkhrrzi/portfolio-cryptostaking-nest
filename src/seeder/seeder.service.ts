@@ -1,3 +1,4 @@
+import { DuplicateResourceCreated } from '@/exceptions/duplicate-resource-created.exception';
 import { TokenService } from '@/modules/token/token.service';
 import { Injectable } from '@nestjs/common';
 
@@ -14,9 +15,13 @@ export class SeederService {
 
   private async tokenSeeder() {
     // seed 'usdt' token
-    await this.tokenService.create({
-      contract_address: '0x281164a08efe10445772B26D2154fd6F4b90Fc08',
-      stake_APR: 3,
-    });
+    try {
+      await this.tokenService.create({
+        contract_address: '0x281164a08efe10445772B26D2154fd6F4b90Fc08',
+        stake_APR: 3,
+      });
+    } catch (error) {
+      if (!(error instanceof DuplicateResourceCreated)) throw error;
+    }
   }
 }

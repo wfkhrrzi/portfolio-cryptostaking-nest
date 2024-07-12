@@ -6,7 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { CacheRedis } from 'cache-manager';
 import { Repository } from 'typeorm';
 import { createPublicClient, http } from 'viem';
-import { bscTestnet } from 'viem/chains';
+import { bsc } from 'viem/chains';
 import { TokenEntity } from '../token/token.entity';
 import { UserEntity } from '../user-v2/user.entity';
 import { StakeDto } from './dtos/stake.dto';
@@ -31,6 +31,9 @@ export class StakingService {
     this.stakeRepository.save(stake);
   }
 
+  async createUnstake() {}
+  async createClaimReward() {}
+
   calcRewardRatePerSecond(percent: number): number {
     return percent / 100 / (365 * 24 * 60 * 60); // USDT etc.
   }
@@ -53,36 +56,32 @@ export class StakingService {
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   // @ts-ignore
-  private async stakeReader(): Promise<void> {
+  private async reader(): Promise<void> {
     console.log('started cron job...');
-
-    // init
-    const key$currentReadBlock = 'stakeReader_currentBlockNumber';
-    const client = createPublicClient({
-      transport: http(),
-      chain: bscTestnet,
-    });
 
     const stakes: StakeEntity[] = [];
 
-    // get range of blocks to read from
-    const latestBlock: bigint = await client.getBlockNumber();
-    const currentReadBlock: bigint = BigInt(
-      (await this.cacheManager.get(key$currentReadBlock)) || latestBlock,
-    );
-
     // fetch all tokens' contract address
-    const tokens = await this.tokenRepository.find({
-      select: {
-        contract_address: true,
-      },
-    });
+    const tokens = await this.tokenRepository.find();
 
     if (!tokens) return;
 
     // extract transactions
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
+
+      // init
+      const key$currentReadBlock = `stakeReader_currentBlockNumber_${token.id}`;
+      const client = createPublicClient({
+        transport: http(),
+        chain: bsc,
+      });
+
+      // get range of blocks to read from
+      const latestBlock: bigint = await client.getBlockNumber();
+      const currentReadBlock: bigint = BigInt(
+        (await this.cacheManager.get(key$currentReadBlock)) || latestBlock,
+      );
 
       // fetch USDT rewards rate per second
       const rewardRatePerSecond: number =
@@ -136,10 +135,19 @@ export class StakingService {
           }),
         );
       });
+
+      // save latestBlockNumber into Redis
+      await this.cacheManager.set(
+        key$currentReadBlock,
+        (latestBlock + 1n).toString(),
+      );
     }
 
-    // save into db
-    await this.stakeRepository.save(stakes);
+    // save stakes into db
+    if (stakes.length > 0) {
+      await this.stakeRepository.save(stakes);
+    }
+
     console.log('ended cron job...');
   }
 }

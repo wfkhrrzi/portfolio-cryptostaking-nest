@@ -1,4 +1,5 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { DuplicateResourceCreated } from '@/exceptions/duplicate-resource-created.exception';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { ContractFunctionName, createPublicClient, erc20Abi, http } from 'viem';
@@ -25,7 +26,9 @@ export class TokenService {
       },
     });
     if (token)
-      throw new ConflictException(`Token '${token.symbol}' is already existed`);
+      throw new DuplicateResourceCreated(
+        `Token with addresss '${token.contract_address}' is already existed`,
+      );
 
     // fetch token data from contract
     const token_attr = ['name', 'symbol', 'decimals'] as ContractFunctionName<
