@@ -18,8 +18,8 @@ import { PostModule } from './modules/post/post.module';
 import { StakingModule } from './modules/staking/staking.module';
 import { TokenModule } from './modules/token/token.module';
 import { UserModule } from './modules/user-v2/user.module';
-import { SeederModule } from './seeder/seeder.module';
-import { SeederService } from './seeder/seeder.service';
+import { SeederModule } from './modules/seeder/seeder.module';
+import { SeederService } from './modules/seeder/seeder.service';
 import { ApiConfigService } from './shared/services/api-config.service';
 import { SharedModule } from './shared/shared.module';
 
