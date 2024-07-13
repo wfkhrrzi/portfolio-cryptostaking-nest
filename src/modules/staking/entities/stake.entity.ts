@@ -13,6 +13,9 @@ export class StakeEntity extends AbstractEntity<StakeDto> {
   @Column({ type: 'varchar', length: '100', unique: true })
   tx_hash!: Hex;
 
+  @Column({ default: false })
+  is_confirmed!: boolean;
+
   @Column({ default: true })
   is_active!: boolean;
 

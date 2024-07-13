@@ -2,7 +2,6 @@ import { AbstractDto } from '@/common/dto/abstract.dto';
 import {
   BigintField,
   BooleanField,
-  DateFieldOptional,
   EnumField,
   SignatureField,
   StringField,
@@ -17,9 +16,6 @@ export class WithdrawalDto extends AbstractDto {
 
   @StringField({ minLength: 66, maxLength: 66 })
   fulfilled_tx_hash: Hex;
-
-  @DateFieldOptional()
-  fulfilled_at: Date | null;
 
   @BigintField()
   amount: bigint;
@@ -39,9 +35,8 @@ export class WithdrawalDto extends AbstractDto {
   constructor(withdrawal: WithdrawalEntity) {
     super(withdrawal);
 
-    this.is_fulfilled = withdrawal.is_fulfilled;
-    this.fulfilled_tx_hash = withdrawal.fulfilled_tx_hash;
-    this.fulfilled_at = withdrawal.fulfilled_at;
+    this.is_fulfilled = withdrawal.is_confirmed;
+    this.fulfilled_tx_hash = withdrawal.tx_hash;
     this.amount = withdrawal.amount;
     this.type = withdrawal.type;
     this.signature = withdrawal.signature;

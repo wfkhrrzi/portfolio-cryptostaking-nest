@@ -9,14 +9,11 @@ import { StakeEntity } from './stake.entity';
 @Entity({ name: 'withdrawals' })
 @UseDto(WithdrawalDto)
 export class WithdrawalEntity extends AbstractEntity<WithdrawalDto> {
-  @Column({ default: false })
-  is_fulfilled!: boolean;
-
   @Column({ type: 'varchar', length: '100', unique: true, nullable: true })
-  fulfilled_tx_hash!: Hex;
+  tx_hash!: Hex;
 
-  @Column({ type: 'timestamp without time zone', nullable: true })
-  fulfilled_at!: Date | null;
+  @Column({ default: false })
+  is_confirmed!: boolean;
 
   @Column({ type: 'bigint' })
   amount!: bigint;
