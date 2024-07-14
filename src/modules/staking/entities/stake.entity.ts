@@ -28,7 +28,7 @@ export class StakeEntity extends AbstractEntity<StakeDto> {
   @Column({ type: 'bigint', default: 0 })
   claimed_reward!: bigint;
 
-  @Column({ type: 'timestamp without time zone', default: 'now()' })
+  @Column({ type: 'timestamp without time zone', default: () => 'now()' })
   reward_updated_at!: Date;
 
   @ManyToOne(() => UserEntity, (userEntity) => userEntity.stakes, {

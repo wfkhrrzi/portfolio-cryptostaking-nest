@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { CacheRedis } from 'cache-manager';
 import { flatMap, map, partition } from 'lodash';
 import { ILike, IsNull, Not, Repository } from 'typeorm';
+import { Transactional } from 'typeorm-transactional';
 import { ContractEventName, Hex, decodeAbiParameters } from 'viem';
 import { UserRegisterDto } from '../auth-siwe/dto/user-register.dto';
 import { TokenEntity } from '../token/token.entity';
@@ -18,9 +19,12 @@ import { UserEntity } from '../user-v2/user.entity';
 import { ViemService } from '../viem/viem.service';
 import { CreateWithdrawalDto } from './dtos/create-withdrawal.dto';
 import { StakeDto } from './dtos/stake.dto';
+import { UpdateWithdrawalDto } from './dtos/update-withdrawal.dto';
 import { StakeEntity } from './entities/stake.entity';
 import { WithdrawalEntity } from './entities/withdrawal.entity';
+import { WithdrawalType } from './enums/withdrawal-type';
 import { StakeNotFoundException } from './exceptions/stake-not-found.exception';
+import { WithdrawalNotFoundException } from './exceptions/withdrawal-not-found.exception';
 
 @Injectable()
 export class StakingService implements OnApplicationBootstrap {
@@ -68,7 +72,15 @@ export class StakingService implements OnApplicationBootstrap {
     this.stakeRepository.save(stake);
   }
 
-  async generateSignAndCreateWithdrawal(
+  /**
+   * - Update rewards & define withdrawal amount
+   * - Generate signature for withdrawal operation
+   * - Save withdrawal into db
+   * @param createWithdrawalDto
+   * @returns signature & withdrawal
+   */
+  @Transactional()
+  async createWithdrawal(
     createWithdrawalDto: CreateWithdrawalDto,
   ): Promise<{ signature: Hex; withdrawal: WithdrawalEntity }> {
     // get stake
@@ -79,6 +91,33 @@ export class StakingService implements OnApplicationBootstrap {
 
     if (!stake) throw new StakeNotFoundException();
 
+    // update rewards
+    const new_rewardUpdatedAt = new Date();
+    const pending_reward: bigint = this._calcReward(
+      stake.reward_updated_at,
+      new_rewardUpdatedAt,
+      stake.token!.reward_rate_per_second!,
+      stake.token!.decimals,
+    );
+
+    // update stake and save into db
+    this.stakeRepository.merge(stake, {
+      reward_updated_at: new_rewardUpdatedAt,
+      total_reward: stake.total_reward + pending_reward,
+    });
+
+    // define withdrawal amount
+    // FIX: if wanna combine unstake w/ claim reward, add another ops and its respective event log in SC &
+    let withdrawalAmount: bigint;
+
+    if (createWithdrawalDto.type === WithdrawalType.CLAIM_REWARD) {
+      // deduct unclaimed reward
+      withdrawalAmount = stake.total_reward - stake.claimed_reward;
+    } else {
+      // deduct full principal amount
+      withdrawalAmount = stake.principal;
+    }
+
     // generate signature
     const client = this.viemService.getWalletClient({
       chainId: stake.token!.chain.chain_id,
@@ -86,7 +125,7 @@ export class StakingService implements OnApplicationBootstrap {
     });
 
     const signatureTimestamp = Math.floor(Date.now() / 1000);
-    const message = `${stake.user!.wallet_address}_${createWithdrawalDto.type}_${createWithdrawalDto.amount.toString()}_${signatureTimestamp}`;
+    const message = `${stake.user!.wallet_address}_${createWithdrawalDto.type}_${withdrawalAmount.toString()}_${signatureTimestamp}`;
     const signature = await client.signMessage({
       message,
     });
@@ -107,7 +146,25 @@ export class StakingService implements OnApplicationBootstrap {
     };
   }
 
-  async updateWithdrawal() {}
+  async updateWithdrawal(updateWithdrawalDto: UpdateWithdrawalDto) {
+    // get tx confirmation
+    const isTxConfirmed = await this.validateTxBlockConfirmation(
+      updateWithdrawalDto.tx_hash,
+      updateWithdrawalDto.chain_id,
+    );
+
+    // update withdrawal & save into db
+    const { stake, withdrawal } = await this._updateWithdrawalAndStake(
+      updateWithdrawalDto,
+      isTxConfirmed,
+    );
+
+    await this.withdrawalRepository.save(withdrawal);
+    await this.stakeRepository.save(stake);
+
+    // return withdrawal
+    return withdrawal;
+  }
 
   calcRewardRatePerSecond(percent: number): number {
     return percent / 100 / (365 * 24 * 60 * 60); // USDT etc.
@@ -135,6 +192,63 @@ export class StakingService implements OnApplicationBootstrap {
     return (_inputArray ? result : result[0]) as T extends Hex[]
       ? boolean[]
       : boolean;
+  }
+
+  /**
+   * Fetch, update (bout not save in db) & return related withdrawal & stake entity
+   * @param updateWithdrawalId withdrawal identification e.g. signature & txHash
+   * @param isTxConfirmed withdrawal tx confirmation
+   * @returns updated withdrawal and stake
+   */
+  private async _updateWithdrawalAndStake(
+    updateWithdrawalId: Required<
+      Pick<UpdateWithdrawalDto, 'signature' | 'tx_hash'>
+    >,
+    isTxConfirmed: boolean,
+  ): Promise<{
+    withdrawal: WithdrawalEntity;
+    stake: StakeEntity;
+  }> {
+    // get tx row by signature
+    const withdrawal: WithdrawalEntity | null =
+      await this.withdrawalRepository.findOne({
+        where: {
+          signature: ILike(updateWithdrawalId.signature),
+        },
+      });
+
+    if (!withdrawal) throw new WithdrawalNotFoundException();
+
+    // create withdrawal if inexist (IMPOSSIBLE because the row should already exist when the signature is generated)
+
+    // update withdrawal's tx_hash & is_confirmed
+    this.withdrawalRepository.merge(withdrawal, {
+      tx_hash: updateWithdrawalId.tx_hash,
+      is_confirmed: isTxConfirmed, //FIXME need to do block confirmations
+    });
+
+    // update rewards / principal in stakes
+    const stake = withdrawal.stake!;
+
+    switch (withdrawal.type) {
+      case WithdrawalType.UNSTAKE:
+        // unstake usdt only(?)
+        stake.principal -= withdrawal.amount;
+        break;
+
+      case WithdrawalType.CLAIM_REWARD:
+        stake.claimed_reward += withdrawal.amount;
+        break;
+    }
+
+    if (stake.claimed_reward == stake.total_reward && stake.principal == 0n) {
+      stake.is_active = false;
+    }
+
+    return {
+      withdrawal,
+      stake,
+    };
   }
 
   private _calcReward(
@@ -411,44 +525,17 @@ export class StakingService implements OnApplicationBootstrap {
                 withdrawalLogs_txInfo[i].input,
               );
 
-              // get tx row by signature
-              let withdrawal: WithdrawalEntity =
-                (await this.withdrawalRepository.findOne({
-                  where: {
-                    signature: ILike(withdrawal_params[0]),
+              const { withdrawal, stake } =
+                await this._updateWithdrawalAndStake(
+                  {
+                    signature: withdrawal_params[0],
+                    tx_hash: log.transactionHash,
                   },
-                }))!;
+                  withdrawalLogs_txConfirmation[i],
+                );
 
-              // create withdrawal if inexist (IMPOSSIBLE because the row should already exist when the signature is generated)
-
-              // insert/update tx fulfilled tx
-              this.withdrawalRepository.merge(withdrawal, {
-                tx_hash: log.transactionHash,
-                is_confirmed: withdrawalLogs_txConfirmation[i], //FIXME need to do block confirmations
-              });
-
+              //   update withdrawal
               withdrawals.push(withdrawal);
-
-              // update rewards / principal in stakes
-              const stake = withdrawal.stake!;
-
-              switch (log.eventName) {
-                case 'UnstakeUSDT':
-                  // unstake usdt only(?)
-                  stake.principal -= withdrawal.amount;
-                  break;
-
-                case 'ClaimUSDTReward':
-                  stake.claimed_reward += withdrawal.amount;
-                  break;
-              }
-
-              if (
-                stake.claimed_reward == stake.total_reward &&
-                stake.principal == 0n
-              ) {
-                stake.is_active = false;
-              }
 
               //   update stake
               stakes.push(stake);
