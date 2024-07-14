@@ -25,6 +25,7 @@ import { UserModule } from './modules/user-v2/user.module';
 import { ViemModule } from './modules/viem/viem.module';
 import { ApiConfigService } from './shared/services/api-config.service';
 import { SharedModule } from './shared/shared.module';
+import { UserV2Subscriber } from './entity-subscribers/user-v2-subscriber';
 
 @Module({
   imports: [
@@ -99,6 +100,7 @@ import { SharedModule } from './shared/shared.module';
       provide: APP_INTERCEPTOR,
       useClass: ApiResponseInterceptor,
     },
+    UserV2Subscriber,
   ],
 })
 export class AppModule {}

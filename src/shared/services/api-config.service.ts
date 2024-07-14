@@ -5,8 +5,7 @@ import { type TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { isNil } from 'lodash';
 import { default as parse, type Units } from 'parse-duration';
 
-import { isAddress } from 'viem';
-import { UserSubscriber } from '../../entity-subscribers/user-subscriber';
+import { Address, Hex, isAddress, isHex } from 'viem';
 import { SnakeNamingStrategy } from '../../snake-naming.strategy';
 
 @Injectable()
@@ -101,7 +100,7 @@ export class ApiConfigService {
       username: this.getString('DB_USERNAME'),
       password: this.getString('DB_PASSWORD'),
       database: this.getString('DB_DATABASE'),
-      subscribers: [UserSubscriber],
+      //   subscribers: [UserV2Subscriber],
       migrationsRun: true,
       logging: this.getBoolean('ENABLE_ORM_LOGS'),
       namingStrategy: new SnakeNamingStrategy(),
@@ -151,6 +150,10 @@ export class ApiConfigService {
     };
   }
 
+  get aesSecretKey() {
+    return this.getString('AES_SECRET_KEY');
+  }
+
   get localContract() {
     const cryptostaking_contract = this.getString(
       'LOCAL_CRYPTOSTAKING_CONTRACT',
@@ -170,6 +173,19 @@ export class ApiConfigService {
       };
 
     throw new Error('Invalid local contract addresses');
+  }
+
+  get testWallet() {
+    const wallet_address = this.getString('TEST_WALLET_ADDRESS');
+    const wallet_key = this.getString('TEST_WALLET_KEY');
+
+    if (isAddress(wallet_address) && isHex(wallet_key))
+      return {
+        wallet_address: wallet_address as Address,
+        wallet_key: wallet_key as Hex,
+      };
+
+    throw new Error('Invalid wallet .env variables set');
   }
 
   private get(key: string): string {

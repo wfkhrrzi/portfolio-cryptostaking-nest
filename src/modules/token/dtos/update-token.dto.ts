@@ -1,8 +1,10 @@
 import {
+  ClassField,
   NumberFieldOptional,
   StringFieldOptional,
   WalletAddressFieldOptional,
 } from '@/decorators';
+import { UserDto } from '@/modules/user-v2/dtos/user.dto';
 import { Address } from 'viem';
 
 export class UpdateTokenDto {
@@ -17,4 +19,7 @@ export class UpdateTokenDto {
 
   @NumberFieldOptional({ isPositive: true })
   stake_APR?: number;
+
+  @ClassField(() => UserDto)
+  user?: UserDto;
 }

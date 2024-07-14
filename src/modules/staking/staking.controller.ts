@@ -1,4 +1,10 @@
 import { Controller } from '@nestjs/common';
 
 @Controller('staking')
-export class StakingController {}
+export class StakingController {
+
+    async requestWithdrawal() {
+        
+    }
+
+}

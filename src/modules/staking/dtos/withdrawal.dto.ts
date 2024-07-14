@@ -1,42 +1,43 @@
 import { AbstractDto } from '@/common/dto/abstract.dto';
 import {
-  BigintField,
-  BooleanField,
-  EnumField,
-  SignatureField,
-  StringField,
+  BigintFieldOptional,
+  BooleanFieldOptional,
+  EnumFieldOptional,
+  HashFieldOptional,
+  SignatureFieldOptional,
+  StringFieldOptional,
 } from '@/decorators';
 import { Hex } from 'viem';
 import { WithdrawalEntity } from '../entities/withdrawal.entity';
 import { WithdrawalType } from '../enums/withdrawal-type';
 
 export class WithdrawalDto extends AbstractDto {
-  @BooleanField()
-  is_fulfilled: boolean;
+  @BooleanFieldOptional()
+  is_confirmed: boolean;
 
-  @StringField({ minLength: 66, maxLength: 66 })
-  fulfilled_tx_hash: Hex;
+  @HashFieldOptional()
+  tx_hash: Hex;
 
-  @BigintField()
+  @BigintFieldOptional()
   amount: bigint;
 
-  @EnumField(() => WithdrawalType)
+  @EnumFieldOptional(() => WithdrawalType)
   type: WithdrawalType;
 
-  @SignatureField()
+  @SignatureFieldOptional()
   signature: Hex;
 
-  @StringField({ minLength: 66, maxLength: 66 })
+  @HashFieldOptional({ minLength: 66, maxLength: 66 })
   signature_hash: Hex;
 
-  @StringField()
+  @StringFieldOptional()
   signature_message: string;
 
   constructor(withdrawal: WithdrawalEntity) {
     super(withdrawal);
 
-    this.is_fulfilled = withdrawal.is_confirmed;
-    this.fulfilled_tx_hash = withdrawal.tx_hash;
+    this.is_confirmed = withdrawal.is_confirmed;
+    this.tx_hash = withdrawal.tx_hash;
     this.amount = withdrawal.amount;
     this.type = withdrawal.type;
     this.signature = withdrawal.signature;

@@ -1,19 +1,23 @@
 import { AbstractDto } from '@/common/dto/abstract.dto';
-import { BigintField, DateFieldOptional, StringField } from '@/decorators';
+import {
+  BigintFieldOptional,
+  DateFieldOptional,
+  HashFieldOptional,
+} from '@/decorators';
 import { Hex } from 'viem';
 import { StakeEntity } from '../entities/stake.entity';
 
 export class StakeDto extends AbstractDto {
-  @StringField({ maxLength: 66, minLength: 66 })
+  @HashFieldOptional()
   tx_hash: Hex;
 
-  @BigintField()
+  @BigintFieldOptional()
   principal: bigint;
 
-  @BigintField()
+  @BigintFieldOptional()
   total_reward: bigint;
 
-  @BigintField()
+  @BigintFieldOptional()
   claimed_reward: bigint;
 
   @DateFieldOptional()

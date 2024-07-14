@@ -16,9 +16,11 @@ import { UserRegisterDto } from '../auth-siwe/dto/user-register.dto';
 import { TokenEntity } from '../token/token.entity';
 import { UserEntity } from '../user-v2/user.entity';
 import { ViemService } from '../viem/viem.service';
+import { CreateWithdrawalDto } from './dtos/create-withdrawal.dto';
 import { StakeDto } from './dtos/stake.dto';
 import { StakeEntity } from './entities/stake.entity';
 import { WithdrawalEntity } from './entities/withdrawal.entity';
+import { StakeNotFoundException } from './exceptions/stake-not-found.exception';
 
 @Injectable()
 export class StakingService implements OnApplicationBootstrap {
@@ -66,8 +68,46 @@ export class StakingService implements OnApplicationBootstrap {
     this.stakeRepository.save(stake);
   }
 
-  async createUnstake() {}
-  async createClaimReward() {}
+  async generateSignAndCreateWithdrawal(
+    createWithdrawalDto: CreateWithdrawalDto,
+  ): Promise<{ signature: Hex; withdrawal: WithdrawalEntity }> {
+    // get stake
+    const stake = await this.stakeRepository.findOne({
+      where: { id: createWithdrawalDto.stake_id },
+      relations: ['token', 'user', 'token.user', 'token.chain'],
+    });
+
+    if (!stake) throw new StakeNotFoundException();
+
+    // generate signature
+    const client = this.viemService.getWalletClient({
+      chainId: stake.token!.chain.chain_id,
+      privateKey: stake.token!.user.wallet_key!,
+    });
+
+    const signatureTimestamp = Math.floor(Date.now() / 1000);
+    const message = `${stake.user!.wallet_address}_${createWithdrawalDto.type}_${createWithdrawalDto.amount.toString()}_${signatureTimestamp}`;
+    const signature = await client.signMessage({
+      message,
+    });
+
+    // create withdrawal entity & save into db
+    const withdrawal = this.withdrawalRepository.create({
+      ...createWithdrawalDto,
+      signature,
+      signature_message: message,
+    });
+
+    await this.withdrawalRepository.save(withdrawal);
+
+    // return signature
+    return {
+      signature,
+      withdrawal,
+    };
+  }
+
+  async updateWithdrawal() {}
 
   calcRewardRatePerSecond(percent: number): number {
     return percent / 100 / (365 * 24 * 60 * 60); // USDT etc.
@@ -121,7 +161,7 @@ export class StakingService implements OnApplicationBootstrap {
     return adjustedReward; // adjusted reward
   }
 
-  async getCacheReadBlockNumber(token: TokenEntity): Promise<bigint> {
+  private async getCacheReadBlockNumber(token: TokenEntity): Promise<bigint> {
     return BigInt(
       (await this.cacheManager.get(
         `stakeReader_currentBlockNumber_${token.id}`,
@@ -129,7 +169,7 @@ export class StakingService implements OnApplicationBootstrap {
     );
   }
 
-  async setCacheReadBlockNumber(
+  private async setCacheReadBlockNumber(
     token: TokenEntity,
     latestBlockNumber: bigint,
   ): Promise<void> {

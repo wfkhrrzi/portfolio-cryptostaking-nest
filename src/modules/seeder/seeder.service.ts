@@ -1,19 +1,28 @@
 import { DuplicateResourceCreated } from '@/exceptions/duplicate-resource-created.exception';
 import { TokenService } from '@/modules/token/token.service';
 import { ApiConfigService } from '@/shared/services/api-config.service';
-import { Inject, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import { bscTestnet, hardhat } from 'viem/chains';
 import { CreateNetworkChainDto } from '../network-chain/dto/create-network-chain.dto';
 import { NetworkChainService } from '../network-chain/network-chain.service';
 import { CreateTokenDto } from '../token/dtos/create-token.dto';
+import { UserService } from '../user-v2/user.service';
 import { VIEM_MODULE_OPTIONS } from '../viem/viem.constants';
 import { ViemModuleOptions } from '../viem/viem.interface';
 
 @Injectable()
 export class SeederService implements OnApplicationBootstrap {
+  private logger = new Logger();
+
   constructor(
     private networkChainService: NetworkChainService,
     private tokenService: TokenService,
+    private userService: UserService,
     private configService: ApiConfigService,
     @Inject(VIEM_MODULE_OPTIONS) private viem_options: ViemModuleOptions,
   ) {}
@@ -22,11 +31,14 @@ export class SeederService implements OnApplicationBootstrap {
    * Run all seeders on application bootstrap
    */
   async onApplicationBootstrap() {
-    await this.networkChainSeeder();
-    await this.tokenSeeder();
+    this.logger.verbose('Seeding test data initiated.');
+    await this.seedNetworkChains();
+    await this.seedTokens();
+    await this.seedTokenSigners();
+    this.logger.verbose('Seeding test data completed.');
   }
 
-  private async tokenSeeder() {
+  private async seedTokens() {
     // seed 'usdt' token
     const testnet_usdt_contract: CreateTokenDto = {
       contract_address: '0x281164a08efe10445772B26D2154fd6F4b90Fc08',
@@ -51,7 +63,7 @@ export class SeederService implements OnApplicationBootstrap {
     }
   }
 
-  private async networkChainSeeder() {
+  private async seedNetworkChains() {
     // seed all registered  chains
     const chains: CreateNetworkChainDto[] = this.viem_options.chains.map(
       (chain) => ({ chain_id: chain.id, chain_name: chain.name }),
@@ -59,6 +71,37 @@ export class SeederService implements OnApplicationBootstrap {
 
     try {
       await this.networkChainService.create(chains);
+    } catch (error) {
+      if (!(error instanceof DuplicateResourceCreated)) throw error;
+    }
+  }
+
+  private async seedTokenSigners() {
+    // seed signer user
+    try {
+      // create user
+      const user = await this.userService.createAdmin({
+        wallet_address: this.configService.testWallet.wallet_address,
+        wallet_key: this.configService.testWallet.wallet_key,
+        chain_id: this.viem_options.chains[0].id,
+      });
+
+      // get tokens
+      const tokens = await this.tokenService.findAll();
+
+      await Promise.all(
+        tokens.map(
+          async (token) => await this.tokenService.update(token.id, { user }),
+        ),
+      );
+
+      //   log decrypted private key
+      const logUser = await this.userService.findOne({
+        wallet_address: this.configService.testWallet.wallet_address,
+      });
+      this.logger.warn(
+        `Decrypted private key for user ${logUser!.wallet_address}: ${logUser!.wallet_key}`,
+      );
     } catch (error) {
       if (!(error instanceof DuplicateResourceCreated)) throw error;
     }

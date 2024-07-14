@@ -1,9 +1,10 @@
 import { AbstractEntity } from '@/common/abstract.entity';
 import { UseDto } from '@/decorators';
-import { Column, Entity, ManyToOne, OneToMany } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { Address } from 'viem';
-import { StakeEntity } from '../staking/entities/stake.entity';
 import { NetworkChainEntity } from '../network-chain/network-chain.entity';
+import { StakeEntity } from '../staking/entities/stake.entity';
+import { UserEntity } from '../user-v2/user.entity';
 import { TokenDto } from './dtos/token.dto';
 
 @Entity({ name: 'tokens' })
@@ -32,4 +33,9 @@ export class TokenEntity extends AbstractEntity<TokenDto> {
 
   @ManyToOne(() => NetworkChainEntity, (chainEntity) => chainEntity.tokens)
   chain!: NetworkChainEntity;
+
+  //   signers
+  @ManyToOne(() => UserEntity, (signerEntity) => signerEntity.tokens)
+  @JoinColumn({ name: 'signer_id' })
+  user!: UserEntity;
 }

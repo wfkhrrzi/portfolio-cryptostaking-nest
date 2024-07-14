@@ -3,9 +3,10 @@ import { Column, Entity, OneToMany } from 'typeorm';
 import { AbstractEntity } from '@/common/abstract.entity';
 import { RoleType } from '@/constants';
 import { UseDto } from '@/decorators';
-import { Address } from 'viem';
+import { Address, Hex } from 'viem';
 import { PostEntity } from '../post/post.entity';
 import { StakeEntity } from '../staking/entities/stake.entity';
+import { TokenEntity } from '../token/token.entity';
 import { UserDto, type UserDtoOptions } from './dtos/user.dto';
 
 @Entity({ name: 'wallet_users' })
@@ -13,6 +14,12 @@ import { UserDto, type UserDtoOptions } from './dtos/user.dto';
 export class UserEntity extends AbstractEntity<UserDto, UserDtoOptions> {
   @Column({ type: 'varchar', length: 100 })
   wallet_address!: Address;
+
+  @Column({ type: 'varchar', nullable: true })
+  wallet_key?: Hex;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  wallet_encrypt_iv?: string;
 
   @Column({ type: 'enum', enum: RoleType, default: RoleType.USER })
   role!: RoleType;
@@ -22,4 +29,8 @@ export class UserEntity extends AbstractEntity<UserDto, UserDtoOptions> {
 
   @OneToMany(() => StakeEntity, (stakesEntity) => stakesEntity.user)
   stakes?: StakeEntity[];
+
+  //   signers
+  @OneToMany(() => TokenEntity, (tokenEntity) => tokenEntity.user)
+  tokens?: TokenEntity[];
 }

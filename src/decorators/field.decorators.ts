@@ -505,6 +505,31 @@ export function WalletAddressFieldOptional(
   );
 }
 
+export function HashField(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  const decorators = [
+    StringField({
+      toLowerCase: true,
+      maxLength: 66,
+      minLength: 66,
+      ...options,
+    }),
+    isHexDecimal,
+  ];
+
+  return applyDecorators(...decorators);
+}
+
+export function HashFieldOptional(
+  options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
+): PropertyDecorator {
+  return applyDecorators(
+    IsUndefinable(),
+    HashField({ ...options, required: false }),
+  );
+}
+
 export function SignatureField(
   options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
 ): PropertyDecorator {
