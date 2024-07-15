@@ -1,3 +1,4 @@
+import { PageDto } from '@/common/dto/page.dto';
 import abiCryptostaking from '@/interfaces/abi-cryptostaking';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
@@ -27,7 +28,10 @@ import { UserEntity } from '../user-v2/user.entity';
 import { ViemService } from '../viem/viem.service';
 import { CreateStakeDto } from './dtos/create-stake.dto';
 import { CreateWithdrawalDto } from './dtos/create-withdrawal.dto';
+import { StakeDto } from './dtos/stake.dto';
+import { StakesPageOptionsDto } from './dtos/stakes-page-options.dto';
 import { UpdateWithdrawalDto } from './dtos/update-withdrawal.dto';
+import { WithdrawalDto } from './dtos/withdrawal.dto';
 import { StakeEntity } from './entities/stake.entity';
 import { WithdrawalEntity } from './entities/withdrawal.entity';
 import { WithdrawalType } from './enums/withdrawal-type';
@@ -73,11 +77,30 @@ export class StakingService implements OnApplicationBootstrap {
     this.logger.log('Redis currentBlockNumber is set up.');
   }
 
+  async findStakes(
+    pageOptionsDto: StakesPageOptionsDto,
+  ): Promise<PageDto<StakeDto>> {
+    const queryBuilder = this.stakeRepository.createQueryBuilder('stake');
+    const [items, pageMetaDto] = await queryBuilder.paginate(pageOptionsDto);
+
+    return items.toPageDto(pageMetaDto);
+  }
+
+  async findStake(stakeId: Uuid): Promise<StakeDto> {
+    const stake = await this.stakeRepository.findOneBy({ id: stakeId });
+
+    if (!stake) {
+      throw new StakeNotFoundException();
+    }
+
+    return stake.toDto();
+  }
+
   @Transactional()
   async createStake(
     createStakeDto: CreateStakeDto,
     user: UserEntity,
-  ): Promise<StakeEntity> {
+  ): Promise<StakeDto> {
     // get token
     const token = await this.tokenRepository.findOne({
       where: { id: createStakeDto.token_id },
@@ -140,7 +163,7 @@ export class StakingService implements OnApplicationBootstrap {
     // save stake to db
     await this.stakeRepository.save(stake);
 
-    return stake;
+    return stake.toDto();
   }
 
   /**
@@ -208,7 +231,7 @@ export class StakingService implements OnApplicationBootstrap {
   @Transactional()
   async createWithdrawal(
     createWithdrawalDto: CreateWithdrawalDto,
-  ): Promise<{ signature: Hex; withdrawal: WithdrawalEntity }> {
+  ): Promise<WithdrawalDto> {
     // get stake
     const stake = await this.stakeRepository.findOne({
       where: { id: createWithdrawalDto.stake_id },
@@ -266,10 +289,7 @@ export class StakingService implements OnApplicationBootstrap {
     await this.withdrawalRepository.save(withdrawal);
 
     // return signature
-    return {
-      signature,
-      withdrawal,
-    };
+    return withdrawal.toDto();
   }
 
   async updateWithdrawal(updateWithdrawalDto: UpdateWithdrawalDto) {
@@ -296,7 +316,7 @@ export class StakingService implements OnApplicationBootstrap {
     return percent / 100 / (365 * 24 * 60 * 60); // USDT etc.
   }
 
-  async validateTxBlockConfirmation<T extends Hex[] | Hex>(
+  private async validateTxBlockConfirmation<T extends Hex[] | Hex>(
     txHash: T,
     chainId: number,
   ): Promise<T extends Hex[] ? boolean[] : boolean> {
@@ -342,6 +362,9 @@ export class StakingService implements OnApplicationBootstrap {
       await this.withdrawalRepository.findOne({
         where: {
           signature: ILike(updateWithdrawalId.signature),
+        },
+        relations: {
+          stake: true,
         },
       });
 
@@ -531,11 +554,6 @@ export class StakingService implements OnApplicationBootstrap {
           const latestBlock: bigint = await client.getBlockNumber();
           const currentReadBlock: bigint =
             (await this.getCacheReadBlockNumber(token)) || latestBlock;
-
-          // fetch USDT rewards rate per second
-          const rewardRatePerSecond: number =
-            token.reward_rate_per_second ??
-            this.calcRewardRatePerSecond(token.stake_APR);
 
           // extract logs containing all ops
           // segregate StakeUSDT & Withdrawal Events

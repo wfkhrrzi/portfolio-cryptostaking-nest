@@ -29,12 +29,11 @@ export class UserV2Subscriber implements EntitySubscriberInterface<UserEntity> {
     this.logger.verbose('`BeforeInsert` event initiated.');
 
     if (event.entity.wallet_key) {
-      const { encrypted_data, iv } = this.encryptionService.encrypt(
+      const encrypted_data = this.encryptionService.encrypt(
         event.entity.wallet_key,
       );
 
       event.entity.wallet_key = encrypted_data;
-      event.entity.wallet_encrypt_iv = iv;
     }
   }
 
@@ -44,12 +43,9 @@ export class UserV2Subscriber implements EntitySubscriberInterface<UserEntity> {
     const entity = event.entity as UserEntity;
 
     if (entity.wallet_key !== event.databaseEntity.wallet_key) {
-      const { encrypted_data, iv } = this.encryptionService.encrypt(
-        entity.wallet_key!,
-      );
+      const encrypted_data = this.encryptionService.encrypt(entity.wallet_key!);
 
       entity.wallet_key = encrypted_data;
-      entity.wallet_encrypt_iv = iv;
     }
   }
 
@@ -57,10 +53,7 @@ export class UserV2Subscriber implements EntitySubscriberInterface<UserEntity> {
     this.logger.verbose('`afterLoad` event initiated.');
 
     if (entity.wallet_key) {
-      entity.wallet_key = this.encryptionService.decrypt(
-        entity.wallet_key,
-        entity.wallet_encrypt_iv!,
-      );
+      entity.wallet_key = this.encryptionService.decrypt(entity.wallet_key);
     }
   }
 }

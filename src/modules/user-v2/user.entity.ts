@@ -18,9 +18,6 @@ export class UserEntity extends AbstractEntity<UserDto, UserDtoOptions> {
   @Column({ type: 'varchar', nullable: true })
   wallet_key?: Hex;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  wallet_encrypt_iv?: string;
-
   @Column({ type: 'enum', enum: RoleType, default: RoleType.USER })
   role!: RoleType;
 

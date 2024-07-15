@@ -7,9 +7,15 @@ import {
   SignatureFieldOptional,
   StringFieldOptional,
 } from '@/decorators';
+import { Exclude, Transform } from 'class-transformer';
 import { Hex } from 'viem';
 import { WithdrawalEntity } from '../entities/withdrawal.entity';
 import { WithdrawalType } from '../enums/withdrawal-type';
+
+type WithdrawalTypeResponse = {
+  value: number;
+  ops: string;
+};
 
 export class WithdrawalDto extends AbstractDto {
   @BooleanFieldOptional()
@@ -22,15 +28,22 @@ export class WithdrawalDto extends AbstractDto {
   amount: bigint;
 
   @EnumFieldOptional(() => WithdrawalType)
+  @Transform(({ value }) =>
+    value == WithdrawalType.UNSTAKE
+      ? ({ ops: 'unstake', value } as WithdrawalTypeResponse)
+      : ({ ops: 'claim reward', value } as WithdrawalTypeResponse),
+  )
   type: WithdrawalType;
 
   @SignatureFieldOptional()
   signature: Hex;
 
   @HashFieldOptional({ minLength: 66, maxLength: 66 })
+  @Exclude()
   signature_hash: Hex;
 
   @StringFieldOptional()
+  @Exclude()
   signature_message: string;
 
   constructor(withdrawal: WithdrawalEntity) {

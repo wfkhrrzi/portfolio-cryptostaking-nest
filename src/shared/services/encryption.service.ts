@@ -12,6 +12,7 @@ export class EncryptionService {
   encrypt(data: string) {
     const iv = randomBytes(16);
 
+    // generate encrypted_data
     const cipher = createCipheriv(
       this.AES_ALGORITHM,
       Buffer.from(this.configService.aesSecretKey, 'hex'),
@@ -21,13 +22,19 @@ export class EncryptionService {
     let encrypted_data = cipher.update(data, 'utf8', 'hex');
     encrypted_data += cipher.final('hex');
 
-    return {
-      encrypted_data: encrypted_data as Hex,
-      iv: iv.toString('hex'),
-    };
+    // concat encrypted_data with iv
+    encrypted_data += ':' + iv.toString('hex');
+
+    // return payload
+    return encrypted_data as Hex;
   }
 
-  decrypt(encrypted_data: string, iv: string) {
+  decrypt(encrypted_data: string) {
+    // extract encrypted data & iv
+    let iv: string;
+    [encrypted_data, iv] = encrypted_data.split(':');
+
+    // decrypt
     const decipher = createDecipheriv(
       this.AES_ALGORITHM,
       Buffer.from(this.configService.aesSecretKey, 'hex'),
@@ -37,6 +44,7 @@ export class EncryptionService {
     let decrypted_data = decipher.update(encrypted_data, 'hex', 'utf8');
     decrypted_data += decipher.final('utf8');
 
+    // return decrypted data
     return decrypted_data as Hex;
   }
 }
