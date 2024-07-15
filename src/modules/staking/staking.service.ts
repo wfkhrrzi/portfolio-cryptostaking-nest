@@ -12,13 +12,21 @@ import { CacheRedis } from 'cache-manager';
 import { flatMap, map, partition } from 'lodash';
 import { ILike, IsNull, Not, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { ContractEventName, Hex, decodeAbiParameters } from 'viem';
+import {
+  ContractEventName,
+  GetContractEventsReturnType,
+  Hex,
+  TransactionReceipt,
+  decodeAbiParameters,
+  decodeEventLog,
+} from 'viem';
 import { UserRegisterDto } from '../auth-siwe/dto/user-register.dto';
+import { TokenNotFoundException } from '../token/exceptions/token-not-found.exception';
 import { TokenEntity } from '../token/token.entity';
 import { UserEntity } from '../user-v2/user.entity';
 import { ViemService } from '../viem/viem.service';
+import { CreateStakeDto } from './dtos/create-stake.dto';
 import { CreateWithdrawalDto } from './dtos/create-withdrawal.dto';
-import { StakeDto } from './dtos/stake.dto';
 import { UpdateWithdrawalDto } from './dtos/update-withdrawal.dto';
 import { StakeEntity } from './entities/stake.entity';
 import { WithdrawalEntity } from './entities/withdrawal.entity';
@@ -65,17 +73,135 @@ export class StakingService implements OnApplicationBootstrap {
     this.logger.log('Redis currentBlockNumber is set up.');
   }
 
-  async createStake(createStake: StakeDto) {
-    // insert into db
-    const stake = this.stakeRepository.create(createStake);
+  @Transactional()
+  async createStake(
+    createStakeDto: CreateStakeDto,
+    user: UserEntity,
+  ): Promise<StakeEntity> {
+    // get token
+    const token = await this.tokenRepository.findOne({
+      where: { id: createStakeDto.token_id },
+      relations: {
+        chain: true,
+      },
+    });
 
-    this.stakeRepository.save(stake);
+    if (!token)
+      throw new TokenNotFoundException(
+        `token_id ${createStakeDto.token_id} is invalid.`,
+      );
+
+    const client = this.viemService.getPublicClient(token.chain.chain_id);
+
+    // get tx log
+    let txReceipt: TransactionReceipt;
+    try {
+      txReceipt = await client.getTransactionReceipt({
+        hash: createStakeDto.tx_hash,
+      });
+    } catch (error) {
+      // FIXME format this error
+      throw new Error(
+        `Transaction by tx_hash ${createStakeDto.tx_hash} is not found`,
+      );
+    }
+
+    const log = txReceipt.logs
+      .map((log) =>
+        decodeEventLog({
+          abi: abiCryptostaking,
+          topics: log.topics,
+          data: log.data,
+        }),
+      )
+      .filter((event) => event.eventName == 'StakeUSDT')[0];
+
+    // get tx time
+    const txTime = new Date(
+      Number(
+        (await client.getBlock({ blockHash: txReceipt.blockHash })).timestamp,
+      ) * 1000,
+    );
+
+    // get tx confirmation
+    const isTxConfirmed = await this.validateTxBlockConfirmation(
+      createStakeDto.tx_hash,
+      token.chain.chain_id,
+    );
+
+    // create stake
+    const stake = await this._createStake(user, token, {
+      transactionHash: createStakeDto.tx_hash,
+      args: log.args,
+      isTxConfirmed,
+      txTime,
+    });
+
+    // save stake to db
+    await this.stakeRepository.save(stake);
+
+    return stake;
+  }
+
+  /**
+   * - Calculate reward between the interval of start & current time
+   * - Create & return StakeEntity
+   * - Save stake into db, if specified
+   * @param user user entity
+   * @param token token entity
+   * @param log tx log
+   * @param saveToDb save to db?
+   * @returns {Promise<StakeEntity>} stake entity
+   */
+  private async _createStake(
+    user: UserEntity,
+    token: TokenEntity,
+    log: Pick<
+      GetContractEventsReturnType<typeof abiCryptostaking, 'StakeUSDT'>[0],
+      'transactionHash' | 'args'
+    > & {
+      txTime: Date;
+      isTxConfirmed: boolean;
+    },
+    saveToDb = false,
+  ): Promise<StakeEntity> {
+    // fetch reward rate per second, or calculate one if undefined
+    const rewardRatePerSecond =
+      token.reward_rate_per_second ||
+      this.calcRewardRatePerSecond(token.stake_APR);
+
+    // calculate current reward from initial staking time
+    const reward: bigint = this._calcReward(
+      log.txTime,
+      new Date(),
+      rewardRatePerSecond,
+      token.decimals,
+    );
+
+    // create stake
+    const stake = this.stakeRepository.create({
+      principal: log.args.amount,
+      tx_hash: log.transactionHash,
+      is_confirmed: log.isTxConfirmed,
+      total_reward: reward, // calculated reward
+      reward_updated_at: log.txTime,
+      user,
+      token,
+    });
+
+    // save to db
+    if (saveToDb) {
+      await this.stakeRepository.save(stake);
+    }
+
+    // return stake
+    return stake;
   }
 
   /**
    * - Update rewards & define withdrawal amount
    * - Generate signature for withdrawal operation
-   * - Save withdrawal into db
+   * - Create & save withdrawal into db
    * @param createWithdrawalDto
    * @returns signature & withdrawal
    */
@@ -174,6 +300,8 @@ export class StakingService implements OnApplicationBootstrap {
     txHash: T,
     chainId: number,
   ): Promise<T extends Hex[] ? boolean[] : boolean> {
+    const num_confirmations = 12n;
+
     // convert to hash
     const _inputArray = Array.isArray(txHash);
     const _txHash: Hex[] = _inputArray ? txHash : [txHash];
@@ -185,7 +313,7 @@ export class StakingService implements OnApplicationBootstrap {
       await Promise.all(
         _txHash.map((hash) => client.getTransactionConfirmations({ hash })),
       ),
-      (result) => result >= 12n, // 12 or more block confirmations
+      (result) => result >= num_confirmations, // 12 or more block confirmations
     );
 
     // return booleans result
@@ -477,26 +605,16 @@ export class StakingService implements OnApplicationBootstrap {
                 } as UserRegisterDto);
               }
 
-              // calculate current reward from initial staking time
-              const reward: bigint = this._calcReward(
+              // create stake
+              const stake = await this._createStake(user, token, {
+                transactionHash: log.transactionHash,
+                args: log.args,
+                isTxConfirmed: stakeLogs_txConfirmation[i],
                 txTime,
-                new Date(),
-                rewardRatePerSecond,
-                token.decimals,
-              );
+              });
 
               // push stakes data
-              stakes.push(
-                this.stakeRepository.create({
-                  principal: log.args.amount,
-                  tx_hash: log.transactionHash,
-                  is_confirmed: stakeLogs_txConfirmation[i],
-                  total_reward: reward, // calculated reward
-                  reward_updated_at: txTime,
-                  user,
-                  token,
-                }),
-              );
+              stakes.push(stake);
             }),
           );
 
@@ -525,6 +643,7 @@ export class StakingService implements OnApplicationBootstrap {
                 withdrawalLogs_txInfo[i].input,
               );
 
+              //   handle withdrawal operation
               const { withdrawal, stake } =
                 await this._updateWithdrawalAndStake(
                   {
