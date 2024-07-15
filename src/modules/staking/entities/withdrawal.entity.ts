@@ -12,9 +12,6 @@ export class WithdrawalEntity extends AbstractEntity<WithdrawalDto> {
   @Column({ type: 'varchar', length: '100', unique: true, nullable: true })
   tx_hash!: Hex;
 
-  @Column({ default: false })
-  is_confirmed!: boolean;
-
   @Column({ type: 'bigint' })
   amount!: bigint;
 

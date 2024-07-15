@@ -11,12 +11,11 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CacheRedis } from 'cache-manager';
 import { flatMap, map, partition } from 'lodash';
-import { ILike, IsNull, Not, Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
   ContractEventName,
   GetContractEventsReturnType,
-  Hex,
   TransactionReceipt,
   decodeAbiParameters,
   decodeEventLog,
@@ -146,22 +145,17 @@ export class StakingService implements OnApplicationBootstrap {
       ) * 1000,
     );
 
-    // get tx confirmation
-    const isTxConfirmed = await this.validateTxBlockConfirmation(
-      createStakeDto.tx_hash,
-      token.chain.chain_id,
+    // create & save stake to db
+    const stake = await this._createStake(
+      user,
+      token,
+      {
+        transactionHash: createStakeDto.tx_hash,
+        args: log.args,
+        txTime,
+      },
+      true,
     );
-
-    // create stake
-    const stake = await this._createStake(user, token, {
-      transactionHash: createStakeDto.tx_hash,
-      args: log.args,
-      isTxConfirmed,
-      txTime,
-    });
-
-    // save stake to db
-    await this.stakeRepository.save(stake);
 
     return stake.toDto();
   }
@@ -184,7 +178,6 @@ export class StakingService implements OnApplicationBootstrap {
       'transactionHash' | 'args'
     > & {
       txTime: Date;
-      isTxConfirmed: boolean;
     },
     saveToDb = false,
   ): Promise<StakeEntity> {
@@ -205,7 +198,6 @@ export class StakingService implements OnApplicationBootstrap {
     const stake = this.stakeRepository.create({
       principal: log.args.amount,
       tx_hash: log.transactionHash,
-      is_confirmed: log.isTxConfirmed,
       total_reward: reward, // calculated reward
       reward_updated_at: log.txTime,
       user,
@@ -293,17 +285,9 @@ export class StakingService implements OnApplicationBootstrap {
   }
 
   async updateWithdrawal(updateWithdrawalDto: UpdateWithdrawalDto) {
-    // get tx confirmation
-    const isTxConfirmed = await this.validateTxBlockConfirmation(
-      updateWithdrawalDto.tx_hash,
-      updateWithdrawalDto.chain_id,
-    );
-
     // update withdrawal & save into db
-    const { stake, withdrawal } = await this._updateWithdrawalAndStake(
-      updateWithdrawalDto,
-      isTxConfirmed,
-    );
+    const { stake, withdrawal } =
+      await this._updateWithdrawalAndStake(updateWithdrawalDto);
 
     await this.withdrawalRepository.save(withdrawal);
     await this.stakeRepository.save(stake);
@@ -316,32 +300,6 @@ export class StakingService implements OnApplicationBootstrap {
     return percent / 100 / (365 * 24 * 60 * 60); // USDT etc.
   }
 
-  private async validateTxBlockConfirmation<T extends Hex[] | Hex>(
-    txHash: T,
-    chainId: number,
-  ): Promise<T extends Hex[] ? boolean[] : boolean> {
-    const num_confirmations = 12n;
-
-    // convert to hash
-    const _inputArray = Array.isArray(txHash);
-    const _txHash: Hex[] = _inputArray ? txHash : [txHash];
-
-    // confirm block
-    const client = this.viemService.getPublicClient(chainId);
-
-    const result = map(
-      await Promise.all(
-        _txHash.map((hash) => client.getTransactionConfirmations({ hash })),
-      ),
-      (result) => result >= num_confirmations, // 12 or more block confirmations
-    );
-
-    // return booleans result
-    return (_inputArray ? result : result[0]) as T extends Hex[]
-      ? boolean[]
-      : boolean;
-  }
-
   /**
    * Fetch, update (bout not save in db) & return related withdrawal & stake entity
    * @param updateWithdrawalId withdrawal identification e.g. signature & txHash
@@ -352,7 +310,6 @@ export class StakingService implements OnApplicationBootstrap {
     updateWithdrawalId: Required<
       Pick<UpdateWithdrawalDto, 'signature' | 'tx_hash'>
     >,
-    isTxConfirmed: boolean,
   ): Promise<{
     withdrawal: WithdrawalEntity;
     stake: StakeEntity;
@@ -372,10 +329,9 @@ export class StakingService implements OnApplicationBootstrap {
 
     // create withdrawal if inexist (IMPOSSIBLE because the row should already exist when the signature is generated)
 
-    // update withdrawal's tx_hash & is_confirmed
+    // update withdrawal's tx_hash
     this.withdrawalRepository.merge(withdrawal, {
       tx_hash: updateWithdrawalId.tx_hash,
-      is_confirmed: isTxConfirmed, //FIXME need to do block confirmations
     });
 
     // update rewards / principal in stakes
@@ -444,86 +400,6 @@ export class StakingService implements OnApplicationBootstrap {
     );
   }
 
-  @Cron('*/13 * * * * *') // every 15 seconds
-  //   @ts-ignore
-  private async validateBlockConfirmationReader() {
-    this.logger.verbose(
-      'started `validateBlockConfirmationReader` cron job...',
-    );
-
-    // fetch all tokens
-    const tokens = await this.tokenRepository.find({
-      relations: {
-        chain: true,
-      },
-    });
-
-    const stakesToSave: StakeEntity[] = [];
-    const withdrawalsToSave: WithdrawalEntity[] = [];
-
-    await Promise.all(
-      tokens.map(async (token) => {
-        // fetch pending transactions
-        const stakes = await this.stakeRepository.find({
-          select: {
-            id: true,
-            tx_hash: true,
-          },
-          where: {
-            is_confirmed: false,
-            is_active: true,
-            tx_hash: Not(IsNull()),
-          },
-        });
-        const withdrawals = await this.withdrawalRepository.find({
-          where: { is_confirmed: false, tx_hash: Not(IsNull()) },
-          select: {
-            id: true,
-            tx_hash: true,
-          },
-        });
-
-        // exit if no tx
-        const tx = [
-          ...map(stakes, (stake) => stake.tx_hash),
-          ...map(withdrawals, (withdrawal) => withdrawal.tx_hash),
-        ];
-
-        if (!tx) return;
-
-        //   validate tx
-        const results = await this.validateTxBlockConfirmation(
-          tx,
-          token.chain.chain_id,
-        );
-
-        //   push rows
-        stakesToSave.push(
-          ...results
-            .slice(0, stakes.length)
-            .map((is_confirmed, i) =>
-              this.stakeRepository.merge(stakes[i], { is_confirmed }),
-            ),
-        );
-
-        withdrawalsToSave.push(
-          ...results
-            .slice(stakes.length)
-            .map((is_confirmed, i) =>
-              this.withdrawalRepository.merge(withdrawals[i], { is_confirmed }),
-            ),
-        );
-      }),
-    );
-
-    // save into db
-    if (stakesToSave) await this.stakeRepository.save(stakesToSave);
-    if (withdrawalsToSave)
-      await this.withdrawalRepository.save(withdrawalsToSave);
-
-    this.logger.log('`validateBlockConfirmationReader` cron job ended.');
-  }
-
   @Cron(CronExpression.EVERY_30_SECONDS, {
     timeZone: 'Asia/Kuala_Lumpur',
   })
@@ -547,11 +423,11 @@ export class StakingService implements OnApplicationBootstrap {
       // extract transactions for all tokens registered in the platform
       await Promise.all(
         tokens.map(async (token) => {
-          // init
+          // init client
           const client = this.viemService.getPublicClient(token.chain.chain_id);
 
           // get range of blocks to read from
-          const latestBlock: bigint = await client.getBlockNumber();
+          const latestBlock: bigint = (await client.getBlockNumber()) - 6n; // offset block confirmation
           const currentReadBlock: bigint =
             (await this.getCacheReadBlockNumber(token)) || latestBlock;
 
@@ -591,16 +467,9 @@ export class StakingService implements OnApplicationBootstrap {
 
           if (!blocks) throw new Error('blocks == null');
 
-          // fetch tx confirmation for stakeLogs
-          const stakeLogs_txConfirmation =
-            await this.validateTxBlockConfirmation(
-              map(stakeLogs, (log) => log.transactionHash),
-              token.chain.chain_id,
-            );
-
           // === handle StakeUSDT Event ===
           await Promise.all(
-            map(stakeLogs, async (log, i) => {
+            map(stakeLogs, async (log) => {
               // get timestamp
               const txTime: Date = new Date(
                 Number(
@@ -627,7 +496,6 @@ export class StakingService implements OnApplicationBootstrap {
               const stake = await this._createStake(user, token, {
                 transactionHash: log.transactionHash,
                 args: log.args,
-                isTxConfirmed: stakeLogs_txConfirmation[i],
                 txTime,
               });
 
@@ -645,13 +513,6 @@ export class StakingService implements OnApplicationBootstrap {
             ),
           );
 
-          // fetch tx confirmation for stakeLogs
-          const withdrawalLogs_txConfirmation =
-            await this.validateTxBlockConfirmation(
-              map(withdrawalLogs, (log) => log.transactionHash),
-              token.chain.chain_id,
-            );
-
           // === handle Withdrawal Events (UnstakeUSDT & ClaimReward) ===
           await Promise.all(
             map(withdrawalLogs, async (log, i) => {
@@ -663,13 +524,10 @@ export class StakingService implements OnApplicationBootstrap {
 
               //   handle withdrawal operation
               const { withdrawal, stake } =
-                await this._updateWithdrawalAndStake(
-                  {
-                    signature: withdrawal_params[0],
-                    tx_hash: log.transactionHash,
-                  },
-                  withdrawalLogs_txConfirmation[i],
-                );
+                await this._updateWithdrawalAndStake({
+                  signature: withdrawal_params[0],
+                  tx_hash: log.transactionHash,
+                });
 
               //   update withdrawal
               withdrawals.push(withdrawal);

@@ -1,7 +1,6 @@
 import { AbstractDto } from '@/common/dto/abstract.dto';
 import {
   BigintFieldOptional,
-  BooleanFieldOptional,
   EnumFieldOptional,
   HashFieldOptional,
   SignatureFieldOptional,
@@ -18,9 +17,6 @@ type WithdrawalTypeResponse = {
 };
 
 export class WithdrawalDto extends AbstractDto {
-  @BooleanFieldOptional()
-  is_confirmed: boolean;
-
   @HashFieldOptional()
   tx_hash: Hex;
 
@@ -49,7 +45,6 @@ export class WithdrawalDto extends AbstractDto {
   constructor(withdrawal: WithdrawalEntity) {
     super(withdrawal);
 
-    this.is_confirmed = withdrawal.is_confirmed;
     this.tx_hash = withdrawal.tx_hash;
     this.amount = withdrawal.amount;
     this.type = withdrawal.type;
