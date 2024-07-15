@@ -27,8 +27,8 @@ import { StakingService } from './staking.service';
 export class StakingController {
   constructor(private stakingService: StakingService) {}
 
-  @Get('stake')
-  @Auth([RoleType.USER])
+  @Get('stakes')
+  @Auth([RoleType.ADMIN])
   async getStakes(
     @Query(new ValidationPipe({ transform: true }))
     pageOptionsDto: StakesPageOptionsDto,

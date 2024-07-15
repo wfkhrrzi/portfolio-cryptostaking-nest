@@ -27,6 +27,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src/**/*", "**/*.spec.ts"],
+  "include": ["src/**/*", "**/*.spec.ts", "test/**/*.ts"],
   "exclude": ["node_modules", "src/interfaces/abi-cryptostaking.ts"]
 }
