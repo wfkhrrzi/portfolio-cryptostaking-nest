@@ -260,7 +260,7 @@ export class StakingService implements OnApplicationBootstrap {
     // update stake and save into db
     this.stakeRepository.merge(stake, {
       reward_updated_at: new_rewardUpdatedAt,
-      total_reward: stake.total_reward + pending_reward,
+      total_reward: stake.total_reward.toBigInt() + pending_reward,
     });
 
     // define withdrawal amount
@@ -269,7 +269,8 @@ export class StakingService implements OnApplicationBootstrap {
 
     if (createWithdrawalDto.type === WithdrawalType.CLAIM_REWARD) {
       // deduct unclaimed reward
-      withdrawalAmount = stake.total_reward - stake.claimed_reward;
+      withdrawalAmount =
+        stake.total_reward.toBigInt() - stake.claimed_reward.toBigInt();
     } else {
       // deduct full principal amount
       withdrawalAmount = stake.principal;
@@ -378,19 +379,20 @@ export class StakingService implements OnApplicationBootstrap {
         );
 
         // unstake usdt only(?)
-        stake.principal = BigInt(stake.principal) - BigInt(withdrawal.amount);
-        stake.total_reward = BigInt(stake.total_reward) + BigInt(reward);
+        stake.principal =
+          stake.principal.toBigInt() - withdrawal.amount.toBigInt();
+        stake.total_reward = stake.total_reward.toBigInt() + reward.toBigInt();
         break;
 
       case WithdrawalType.CLAIM_REWARD:
         stake.claimed_reward =
-          BigInt(stake.claimed_reward) + BigInt(withdrawal.amount);
+          stake.claimed_reward.toBigInt() + withdrawal.amount.toBigInt();
         break;
     }
 
     if (
-      BigInt(stake.claimed_reward) == BigInt(stake.total_reward) &&
-      BigInt(stake.principal) == 0n
+      stake.claimed_reward.toBigInt() == stake.total_reward.toBigInt() &&
+      stake.principal.toBigInt() == 0n
     ) {
       stake.is_active = false;
     }
@@ -461,7 +463,7 @@ export class StakingService implements OnApplicationBootstrap {
     const reward =
       rewardRatePerSecond * (Number(principal) / 10 ** tokenDecimal) * duration; // reward for that duration
 
-    const adjustedReward = BigInt(Math.floor(reward * 10 ** tokenDecimal));
+    const adjustedReward = Math.floor(reward * 10 ** tokenDecimal).toBigInt();
 
     return adjustedReward; // adjusted reward
   }

@@ -1,7 +1,7 @@
 import 'source-map-support/register';
 
 import { compact, map } from 'lodash';
-import { Brackets, type ObjectLiteral, SelectQueryBuilder } from 'typeorm';
+import { Brackets, SelectQueryBuilder, type ObjectLiteral } from 'typeorm';
 
 import { Cache, Milliseconds } from 'cache-manager';
 import { type AbstractEntity } from './common/abstract.entity';
@@ -26,6 +26,21 @@ declare global {
       // FIXME make option type visible from entity
       options?: unknown,
     ): PageDto<Dto>;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  interface BigInt {
+    toBigInt(this: any): bigint;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  interface String {
+    toBigInt(this: any): bigint;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  interface Number {
+    toBigInt(this: any): bigint;
   }
 }
 
@@ -106,6 +121,18 @@ Array.prototype.toPageDto = function (
   options?: unknown,
 ) {
   return new PageDto(this.toDtos(options), pageMetaDto);
+};
+
+BigInt.prototype.toBigInt = function () {
+  return BigInt(this);
+};
+
+String.prototype.toBigInt = function () {
+  return BigInt(this);
+};
+
+Number.prototype.toBigInt = function () {
+  return BigInt(this);
 };
 
 SelectQueryBuilder.prototype.searchByString = function (
