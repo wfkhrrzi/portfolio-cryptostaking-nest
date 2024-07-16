@@ -43,6 +43,8 @@ import { WithdrawalNotFoundException } from './exceptions/withdrawal-not-found.e
 
 @Injectable()
 export class StakingService implements OnApplicationBootstrap {
+  private num_block_confirmations = 6;
+
   private logger = new Logger('StakingService');
 
   constructor(
@@ -192,26 +194,11 @@ export class StakingService implements OnApplicationBootstrap {
     },
     saveToDb = false,
   ): Promise<StakeEntity> {
-    // fetch reward rate per second, or calculate one if undefined
-    const rewardRatePerSecond =
-      token.reward_rate_per_second ||
-      this._calcRewardRatePerSecond(token.stake_APR);
-
-    // calculate current reward from initial staking time
-    const reward: bigint = this._calcReward(
-      log.args.amount!, // principal
-      log.txTime,
-      new Date(),
-      rewardRatePerSecond,
-      token.decimals,
-    );
-
     // create stake
     const stake = this.stakeRepository.create({
       principal: log.args.amount,
       tx_hash: log.transactionHash,
-      total_reward: reward, // calculated reward
-      reward_updated_at: log.txTime,
+      reward_updated_at: log.txTime, // head-point cutoff must be from block.timestamp
       user,
       token,
     });
@@ -247,27 +234,30 @@ export class StakingService implements OnApplicationBootstrap {
 
     if (!stake) throw new StakeNotFoundException();
 
-    // update rewards
-    const new_rewardUpdatedAt = new Date();
-    const pending_reward: bigint = this._calcReward(
-      stake.principal,
-      stake.reward_updated_at,
-      new_rewardUpdatedAt,
-      stake.token!.reward_rate_per_second!,
-      stake.token!.decimals,
-    );
-
-    // update stake and save into db
-    this.stakeRepository.merge(stake, {
-      reward_updated_at: new_rewardUpdatedAt,
-      total_reward: stake.total_reward.toBigInt() + pending_reward,
-    });
-
     // define withdrawal amount
     // FIX: if wanna combine unstake w/ claim reward, add another ops and its respective event log in SC &
+    // NOTE: currently only one operation at a time. cannot unstake and claim reward at the same time.
     let withdrawalAmount: bigint;
 
     if (createWithdrawalDto.type === WithdrawalType.CLAIM_REWARD) {
+      // update rewards
+      const new_rewardUpdatedAt = new Date(); // middle-point cutoff point does not have to be from block.timestamp
+      const pending_reward: bigint = this._calcReward(
+        stake.principal,
+        stake.reward_updated_at,
+        new_rewardUpdatedAt,
+        stake.token!.reward_rate_per_second!,
+        stake.token!.decimals,
+      );
+
+      // update total reward in stake and save into db
+      this.stakeRepository.merge(stake, {
+        reward_updated_at: new_rewardUpdatedAt,
+        total_reward: stake.total_reward.toBigInt() + pending_reward,
+      });
+
+      await this.stakeRepository.update(stake.id, stake);
+
       // deduct unclaimed reward
       withdrawalAmount =
         stake.total_reward.toBigInt() - stake.claimed_reward.toBigInt();
@@ -304,19 +294,36 @@ export class StakingService implements OnApplicationBootstrap {
 
   @Transactional()
   async updateWithdrawal(updateWithdrawalDto: UpdateWithdrawalDto) {
+    const client = this.viemService.getPublicClient(
+      updateWithdrawalDto.chain_id,
+    );
+
+    // get tx timestamp
+    const txTimestamp = (
+      await client.getBlock({
+        blockHash: (
+          await client.getTransactionReceipt({
+            hash: updateWithdrawalDto.tx_hash,
+          })
+        ).blockHash,
+      })
+    ).timestamp;
+
     // validate tx confirmation
     if (
       !(await this._validateTxBlockConfirmation(
         updateWithdrawalDto.tx_hash,
-        updateWithdrawalDto.chain_id,
+        client,
       ))
     ) {
       throw new TransactionNotConfirmedException();
     }
 
     // update withdrawal & save into db
-    const { stake, withdrawal } =
-      await this._updateWithdrawalAndStake(updateWithdrawalDto);
+    const { stake, withdrawal } = await this._updateWithdrawalAndStake(
+      updateWithdrawalDto,
+      new Date(Number(txTimestamp) * 1000),
+    );
 
     // save to db
     await this.withdrawalRepository.save(withdrawal);
@@ -340,6 +347,7 @@ export class StakingService implements OnApplicationBootstrap {
     updateWithdrawalId: Required<
       Pick<UpdateWithdrawalDto, 'signature' | 'tx_hash'>
     >,
+    txTimestamp: Date,
   ): Promise<{
     withdrawal: WithdrawalEntity;
     stake: StakeEntity;
@@ -371,8 +379,8 @@ export class StakingService implements OnApplicationBootstrap {
         // calculate current reward
         const reward: bigint = this._calcReward(
           stake.principal,
-          withdrawal.createdAt,
-          new Date(),
+          stake.reward_updated_at,
+          txTimestamp, // tail-point cutoff point must be from block.timestamp
           token.reward_rate_per_second ||
             this._calcRewardRatePerSecond(token.stake_APR),
           token.decimals,
@@ -403,6 +411,11 @@ export class StakingService implements OnApplicationBootstrap {
     };
   }
 
+  /**
+   * Validate number of block confirmation
+   * @param {Hex} txHash
+   * @param {PublicClient | number} option either a public client or chain id
+   */
   private async _validateTxBlockConfirmation<T extends Hex[] | Hex>(
     txHash: T,
     client: PublicClient,
@@ -415,8 +428,6 @@ export class StakingService implements OnApplicationBootstrap {
     txHash: T,
     option: PublicClient | number,
   ): Promise<T extends Hex[] ? boolean[] : boolean> {
-    const num_confirmations = 12n;
-
     // convert to hash
     const _inputArray = Array.isArray(txHash);
     const _txHash: Hex[] = _inputArray ? txHash : [txHash];
@@ -433,7 +444,7 @@ export class StakingService implements OnApplicationBootstrap {
       await Promise.all(
         _txHash.map((hash) => client.getTransactionConfirmations({ hash })),
       ),
-      (result) => result >= num_confirmations, // 12 or more block confirmations
+      (result) => result >= this.num_block_confirmations, // 6 or more block confirmations
     );
 
     // return booleans result
@@ -513,7 +524,9 @@ export class StakingService implements OnApplicationBootstrap {
           const client = this.viemService.getPublicClient(token.chain.chain_id);
 
           // get range of blocks to read from
-          const latestBlock: bigint = (await client.getBlockNumber()) - 6n; // offset block confirmation
+          const latestBlock: bigint =
+            (await client.getBlockNumber()) -
+            this.num_block_confirmations.toBigInt(); // offset block confirmation
           const currentReadBlock: bigint =
             (await this.getCacheReadBlockNumber(token)) || latestBlock;
 
@@ -612,10 +625,18 @@ export class StakingService implements OnApplicationBootstrap {
 
               //   handle withdrawal operation
               const { withdrawal, stake } =
-                await this._updateWithdrawalAndStake({
-                  signature: withdrawal_params.args[0] as Hex,
-                  tx_hash: log.transactionHash,
-                });
+                await this._updateWithdrawalAndStake(
+                  {
+                    signature: withdrawal_params.args[0] as Hex,
+                    tx_hash: log.transactionHash,
+                  },
+                  new Date(
+                    Number(
+                      blocks.find((block) => block.hash === log.blockHash)!
+                        .timestamp,
+                    ) * 1000,
+                  ),
+                );
 
               //   update withdrawal
               withdrawals.push(withdrawal);
