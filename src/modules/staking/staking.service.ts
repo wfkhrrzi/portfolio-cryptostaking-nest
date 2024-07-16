@@ -7,18 +7,21 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CacheRedis } from 'cache-manager';
+import { plainToInstance } from 'class-transformer';
 import { flatMap, map, partition } from 'lodash';
 import { ILike, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
   ContractEventName,
   GetContractEventsReturnType,
+  Hex,
+  PublicClient,
   TransactionReceipt,
-  decodeAbiParameters,
   decodeEventLog,
+  decodeFunctionData,
 } from 'viem';
 import { UserRegisterDto } from '../auth-siwe/dto/user-register.dto';
 import { TokenNotFoundException } from '../token/exceptions/token-not-found.exception';
@@ -35,6 +38,7 @@ import { StakeEntity } from './entities/stake.entity';
 import { WithdrawalEntity } from './entities/withdrawal.entity';
 import { WithdrawalType } from './enums/withdrawal-type';
 import { StakeNotFoundException } from './exceptions/stake-not-found.exception';
+import { TransactionNotConfirmedException } from './exceptions/stake-not-found.exception copy';
 import { WithdrawalNotFoundException } from './exceptions/withdrawal-not-found.exception';
 
 @Injectable()
@@ -115,6 +119,13 @@ export class StakingService implements OnApplicationBootstrap {
 
     const client = this.viemService.getPublicClient(token.chain.chain_id);
 
+    // validate tx confirmation
+    if (
+      !(await this._validateTxBlockConfirmation(createStakeDto.tx_hash, client))
+    ) {
+      throw new TransactionNotConfirmedException();
+    }
+
     // get tx log
     let txReceipt: TransactionReceipt;
     try {
@@ -184,10 +195,11 @@ export class StakingService implements OnApplicationBootstrap {
     // fetch reward rate per second, or calculate one if undefined
     const rewardRatePerSecond =
       token.reward_rate_per_second ||
-      this.calcRewardRatePerSecond(token.stake_APR);
+      this._calcRewardRatePerSecond(token.stake_APR);
 
     // calculate current reward from initial staking time
     const reward: bigint = this._calcReward(
+      log.args.amount!, // principal
       log.txTime,
       new Date(),
       rewardRatePerSecond,
@@ -226,7 +238,10 @@ export class StakingService implements OnApplicationBootstrap {
   ): Promise<WithdrawalDto> {
     // get stake
     const stake = await this.stakeRepository.findOne({
-      where: { id: createWithdrawalDto.stake_id },
+      where: {
+        id: createWithdrawalDto.stake_id,
+        tx_hash: createWithdrawalDto.stake_tx_hash,
+      },
       relations: ['token', 'user', 'token.user', 'token.chain'],
     });
 
@@ -235,6 +250,7 @@ export class StakingService implements OnApplicationBootstrap {
     // update rewards
     const new_rewardUpdatedAt = new Date();
     const pending_reward: bigint = this._calcReward(
+      stake.principal,
       stake.reward_updated_at,
       new_rewardUpdatedAt,
       stake.token!.reward_rate_per_second!,
@@ -266,7 +282,7 @@ export class StakingService implements OnApplicationBootstrap {
     });
 
     const signatureTimestamp = Math.floor(Date.now() / 1000);
-    const message = `${stake.user!.wallet_address}_${createWithdrawalDto.type}_${withdrawalAmount.toString()}_${signatureTimestamp}`;
+    const message = `${stake.user!.wallet_address}_${createWithdrawalDto.type === WithdrawalType.UNSTAKE ? 0 : 1}_${withdrawalAmount.toString()}_${signatureTimestamp}`;
     const signature = await client.signMessage({
       message,
     });
@@ -274,6 +290,7 @@ export class StakingService implements OnApplicationBootstrap {
     // create withdrawal entity & save into db
     const withdrawal = this.withdrawalRepository.create({
       ...createWithdrawalDto,
+      stake,
       signature,
       signature_message: message,
     });
@@ -284,19 +301,31 @@ export class StakingService implements OnApplicationBootstrap {
     return withdrawal.toDto();
   }
 
+  @Transactional()
   async updateWithdrawal(updateWithdrawalDto: UpdateWithdrawalDto) {
+    // validate tx confirmation
+    if (
+      !(await this._validateTxBlockConfirmation(
+        updateWithdrawalDto.tx_hash,
+        updateWithdrawalDto.chain_id,
+      ))
+    ) {
+      throw new TransactionNotConfirmedException();
+    }
+
     // update withdrawal & save into db
     const { stake, withdrawal } =
       await this._updateWithdrawalAndStake(updateWithdrawalDto);
 
+    // save to db
     await this.withdrawalRepository.save(withdrawal);
     await this.stakeRepository.save(stake);
 
     // return withdrawal
-    return withdrawal;
+    return withdrawal.toDto();
   }
 
-  calcRewardRatePerSecond(percent: number): number {
+  private _calcRewardRatePerSecond(percent: number): number {
     return percent / 100 / (365 * 24 * 60 * 60); // USDT etc.
   }
 
@@ -320,9 +349,7 @@ export class StakingService implements OnApplicationBootstrap {
         where: {
           signature: ILike(updateWithdrawalId.signature),
         },
-        relations: {
-          stake: true,
-        },
+        relations: ['stake', 'stake.token'],
       });
 
     if (!withdrawal) throw new WithdrawalNotFoundException();
@@ -336,19 +363,35 @@ export class StakingService implements OnApplicationBootstrap {
 
     // update rewards / principal in stakes
     const stake = withdrawal.stake!;
+    const token = stake.token!;
 
     switch (withdrawal.type) {
       case WithdrawalType.UNSTAKE:
+        // calculate current reward
+        const reward: bigint = this._calcReward(
+          stake.principal,
+          withdrawal.createdAt,
+          new Date(),
+          token.reward_rate_per_second ||
+            this._calcRewardRatePerSecond(token.stake_APR),
+          token.decimals,
+        );
+
         // unstake usdt only(?)
-        stake.principal -= withdrawal.amount;
+        stake.principal = BigInt(stake.principal) - BigInt(withdrawal.amount);
+        stake.total_reward = BigInt(stake.total_reward) + BigInt(reward);
         break;
 
       case WithdrawalType.CLAIM_REWARD:
-        stake.claimed_reward += withdrawal.amount;
+        stake.claimed_reward =
+          BigInt(stake.claimed_reward) + BigInt(withdrawal.amount);
         break;
     }
 
-    if (stake.claimed_reward == stake.total_reward && stake.principal == 0n) {
+    if (
+      BigInt(stake.claimed_reward) == BigInt(stake.total_reward) &&
+      BigInt(stake.principal) == 0n
+    ) {
       stake.is_active = false;
     }
 
@@ -358,7 +401,47 @@ export class StakingService implements OnApplicationBootstrap {
     };
   }
 
+  private async _validateTxBlockConfirmation<T extends Hex[] | Hex>(
+    txHash: T,
+    client: PublicClient,
+  ): Promise<T extends Hex[] ? boolean[] : boolean>;
+  private async _validateTxBlockConfirmation<T extends Hex[] | Hex>(
+    txHash: T,
+    chainId: number,
+  ): Promise<T extends Hex[] ? boolean[] : boolean>;
+  private async _validateTxBlockConfirmation<T extends Hex[] | Hex>(
+    txHash: T,
+    option: PublicClient | number,
+  ): Promise<T extends Hex[] ? boolean[] : boolean> {
+    const num_confirmations = 12n;
+
+    // convert to hash
+    const _inputArray = Array.isArray(txHash);
+    const _txHash: Hex[] = _inputArray ? txHash : [txHash];
+
+    // confirm block
+    let client: PublicClient;
+    if (typeof option == 'object') {
+      client = option;
+    } else {
+      client = this.viemService.getPublicClient(option);
+    }
+
+    const result = map(
+      await Promise.all(
+        _txHash.map((hash) => client.getTransactionConfirmations({ hash })),
+      ),
+      (result) => result >= num_confirmations, // 12 or more block confirmations
+    );
+
+    // return booleans result
+    return (_inputArray ? result : result[0]) as T extends Hex[]
+      ? boolean[]
+      : boolean;
+  }
+
   private _calcReward(
+    principal: bigint,
     startTime: Date,
     endTime: Date,
     rewardRatePerSecond: number,
@@ -371,11 +454,12 @@ export class StakingService implements OnApplicationBootstrap {
 
     // calc duration
     const duration = Math.floor(
-      (endTime.getTime() - startTime.getTime()) * 1000,
+      (endTime.getTime() - startTime.getTime()) / 1000,
     );
 
     // calc reward
-    const reward = rewardRatePerSecond * duration; // reward for that duration
+    const reward =
+      rewardRatePerSecond * (Number(principal) / 10 ** tokenDecimal) * duration; // reward for that duration
 
     const adjustedReward = BigInt(Math.floor(reward * 10 ** tokenDecimal));
 
@@ -400,7 +484,7 @@ export class StakingService implements OnApplicationBootstrap {
     );
   }
 
-  @Cron(CronExpression.EVERY_30_SECONDS, {
+  @Cron('*/15 * * * * *', {
     timeZone: 'Asia/Kuala_Lumpur',
   })
   // @ts-ignore
@@ -487,9 +571,11 @@ export class StakingService implements OnApplicationBootstrap {
 
               // create user if not existed
               if (!user) {
-                user = this.userRepository.create({
-                  wallet_address: log.args.from,
-                } as UserRegisterDto);
+                user = this.userRepository.create(
+                  plainToInstance(UserRegisterDto, {
+                    wallet_address: log.args.from,
+                  } as UserRegisterDto),
+                );
               }
 
               // create stake
@@ -517,15 +603,15 @@ export class StakingService implements OnApplicationBootstrap {
           await Promise.all(
             map(withdrawalLogs, async (log, i) => {
               // decode withdrawal params
-              const withdrawal_params = decodeAbiParameters(
-                abiCryptostaking['17'].inputs,
-                withdrawalLogs_txInfo[i].input,
-              );
+              const withdrawal_params = decodeFunctionData({
+                abi: abiCryptostaking,
+                data: withdrawalLogs_txInfo[i].input,
+              });
 
               //   handle withdrawal operation
               const { withdrawal, stake } =
                 await this._updateWithdrawalAndStake({
-                  signature: withdrawal_params[0],
+                  signature: withdrawal_params.args[0] as Hex,
                   tx_hash: log.transactionHash,
                 });
 
@@ -542,12 +628,16 @@ export class StakingService implements OnApplicationBootstrap {
         }),
       );
 
-      // save stakes into db
+      // save stakes & withdraw into db
       if (stakes.length > 0) {
         await this.stakeRepository.save(stakes);
       }
+
+      if (withdrawals.length > 0) {
+        await this.withdrawalRepository.save(withdrawals);
+      }
     } catch (error) {
-      this.logger.error('Error inside the service!');
+      this.logger.error('Error inside the service!', (error as Error).message);
       //   @ts-ignore
       //   this.logger.error(error.message);
     }

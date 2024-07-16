@@ -7,7 +7,10 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { ILike } from 'typeorm';
 import { bscTestnet, hardhat } from 'viem/chains';
+import { AdminRegisterDto } from '../auth-siwe/dto/admin-register.dto';
 import { CreateNetworkChainDto } from '../network-chain/dto/create-network-chain.dto';
 import { NetworkChainService } from '../network-chain/network-chain.service';
 import { CreateTokenDto } from '../token/dtos/create-token.dto';
@@ -79,11 +82,16 @@ export class SeederService implements OnApplicationBootstrap {
   private async seedTokenSigners() {
     // seed signer user
     try {
-      // create user
-      const user = await this.userService.createAdmin({
+      // prepare user creds
+      const userDto = plainToInstance(AdminRegisterDto, {
         wallet_address: this.configService.testWallet.wallet_address,
         wallet_key: this.configService.testWallet.wallet_key,
         chain_id: this.viem_options.chains[0].id,
+      });
+
+      // create user
+      const user = await this.userService.createAdmin({
+        ...userDto,
       });
 
       // get tokens
@@ -97,7 +105,7 @@ export class SeederService implements OnApplicationBootstrap {
 
       //   log decrypted private key
       const logUser = await this.userService.findOne({
-        wallet_address: this.configService.testWallet.wallet_address,
+        wallet_address: ILike(this.configService.testWallet.wallet_address),
       });
       this.logger.warn(
         `Decrypted private key for user ${logUser!.wallet_address}: ${logUser!.wallet_key}`,

@@ -37,7 +37,7 @@ export class StakingController {
   }
 
   @Post('requestWithdrawal')
-  @Auth([RoleType.USER])
+  //   @Auth([RoleType.USER])
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: WithdrawalDto })
   async requestWithdrawal(
@@ -66,7 +66,7 @@ export class StakingController {
   }
 
   @Post('withdraw')
-  @Auth([RoleType.USER])
+  //   @Auth([RoleType.USER])
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: WithdrawalDto, description: 'Update withdrawal' })
   async withdraw(

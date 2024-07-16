@@ -1,4 +1,4 @@
 export enum WithdrawalType {
-    UNSTAKE,
-    CLAIM_REWARD
+  UNSTAKE = 'unstake',
+  CLAIM_REWARD = 'claim_reward',
 }

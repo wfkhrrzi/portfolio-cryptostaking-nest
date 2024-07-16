@@ -18,7 +18,7 @@ export class WithdrawalEntity extends AbstractEntity<WithdrawalDto> {
   @Column({ type: 'enum', enum: WithdrawalType })
   type!: WithdrawalType;
 
-  @Column({ type: 'varchar', length: '100', unique: true })
+  @Column({ type: 'varchar', length: '200', unique: true })
   signature!: Hex;
 
   @Column({ type: 'varchar', length: '100', nullable: true })

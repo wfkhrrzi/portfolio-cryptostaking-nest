@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-null */
 import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, type ApiPropertyOptions } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDate,
@@ -561,12 +561,12 @@ export function BigintField(
   const decorators = [
     StringField({ ...options }),
     PositiveBigInt,
-    Transform(
-      (param) => {
-        return BigInt(param.value);
-      },
-      { toClassOnly: true },
-    ),
+    // Transform(
+    //   (param) => {
+    //     return BigInt(param.value);
+    //   },
+    //   { toClassOnly: true },
+    // ),
   ];
 
   return applyDecorators(...decorators);

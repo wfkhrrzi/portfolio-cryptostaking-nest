@@ -6,7 +6,7 @@ import {
   SignatureFieldOptional,
   StringFieldOptional,
 } from '@/decorators';
-import { Exclude, Transform } from 'class-transformer';
+import { Exclude, Expose, Transform } from 'class-transformer';
 import { Hex } from 'viem';
 import { WithdrawalEntity } from '../entities/withdrawal.entity';
 import { WithdrawalType } from '../enums/withdrawal-type';
@@ -41,6 +41,17 @@ export class WithdrawalDto extends AbstractDto {
   @StringFieldOptional()
   @Exclude()
   signature_message: string;
+
+  @Expose()
+  get signature_payload() {
+    const timestamp = this.signature_message.split('_').slice(-1)[0];
+
+    return {
+      ops: this.type,
+      amount: this.amount.toString(),
+      timestamp: Number(timestamp),
+    };
+  }
 
   constructor(withdrawal: WithdrawalEntity) {
     super(withdrawal);
