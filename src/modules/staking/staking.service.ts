@@ -39,6 +39,7 @@ import { WithdrawalEntity } from './entities/withdrawal.entity';
 import { WithdrawalType } from './enums/withdrawal-type';
 import { StakeNotFoundException } from './exceptions/stake-not-found.exception';
 import { TransactionNotConfirmedException } from './exceptions/stake-not-found.exception copy';
+import { WithdrawalInvalidParamException } from './exceptions/withdrawal-invalid-param.exception';
 import { WithdrawalNotFoundException } from './exceptions/withdrawal-not-found.exception';
 
 @Injectable()
@@ -258,13 +259,28 @@ export class StakingService implements OnApplicationBootstrap {
 
       await this.stakeRepository.update(stake.id, stake);
 
-      // deduct unclaimed reward
+      // get total unclaimed reward
       withdrawalAmount =
         stake.total_reward.toBigInt() - stake.claimed_reward.toBigInt();
     } else {
-      // deduct full principal amount
-      withdrawalAmount = stake.principal;
+      // get full principal amount
+      withdrawalAmount = stake.principal.toBigInt();
     }
+
+    // check for valid amount, if supplied
+    if (
+      createWithdrawalDto.amount &&
+      createWithdrawalDto.amount.toBigInt() > withdrawalAmount
+    ) {
+      throw new WithdrawalInvalidParamException(
+        `Amount supplied [${createWithdrawalDto.amount}] exceeded max amount [${withdrawalAmount}]`,
+      );
+    }
+
+    // update supplied amount
+    withdrawalAmount = createWithdrawalDto.amount
+      ? withdrawalAmount - createWithdrawalDto.amount.toBigInt()
+      : withdrawalAmount;
 
     // generate signature
     const client = this.viemService.getWalletClient({

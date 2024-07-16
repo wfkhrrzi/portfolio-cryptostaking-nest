@@ -1,4 +1,9 @@
-import { BigintField, EnumField, HashField, UUIDField } from '@/decorators';
+import {
+  BigintFieldOptional,
+  EnumField,
+  HashField,
+  UUIDField,
+} from '@/decorators';
 import { ValidateIf } from 'class-validator';
 import { Hex } from 'viem';
 import { WithdrawalType } from '../enums/withdrawal-type';
@@ -12,8 +17,8 @@ export class CreateWithdrawalDto {
   @HashField()
   stake_tx_hash?: Hex;
 
-  @BigintField()
-  amount!: bigint;
+  @BigintFieldOptional()
+  amount?: bigint;
 
   @EnumField(() => WithdrawalType)
   type!: WithdrawalType;
