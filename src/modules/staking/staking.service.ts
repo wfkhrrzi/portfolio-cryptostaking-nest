@@ -279,7 +279,7 @@ export class StakingService implements OnApplicationBootstrap {
 
     // update supplied amount
     withdrawalAmount = createWithdrawalDto.amount
-      ? withdrawalAmount - createWithdrawalDto.amount.toBigInt()
+      ? createWithdrawalDto.amount.toBigInt()
       : withdrawalAmount;
 
     // generate signature
@@ -402,10 +402,14 @@ export class StakingService implements OnApplicationBootstrap {
           token.decimals,
         );
 
-        // unstake usdt only(?)
+        // unstake usdt
         stake.principal =
           stake.principal.toBigInt() - withdrawal.amount.toBigInt();
+
+        // update reward details
+        stake.reward_updated_at = txTimestamp;
         stake.total_reward = stake.total_reward.toBigInt() + reward.toBigInt();
+
         break;
 
       case WithdrawalType.CLAIM_REWARD:
